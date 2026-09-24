@@ -82,11 +82,11 @@ export const PrateekOverlay: React.FC<Props> = ({
     const electron = (window as any).electronAPI;
     if (electron?.resizeWindow) {
       if (isCardCollapsed) {
-        electron.resizeWindow(740, 115);
+        electron.resizeWindow(740, 75);
       } else if (cardTab === "split") {
-        electron.resizeWindow(860, 520);
+        electron.resizeWindow(860, 480);
       } else {
-        electron.resizeWindow(740, 500);
+        electron.resizeWindow(740, 480);
       }
     }
   }, [isCardCollapsed, cardTab]);
@@ -165,33 +165,6 @@ export const PrateekOverlay: React.FC<Props> = ({
       if (isCapturing) onToggleCapture();
       showToast("Session ended", "info");
     }
-  };
-
-  // Format speech stream chunks as discrete pills like the screenshot
-  const displaySpeechPills = (): string[] => {
-    const rawText = interimText.trim() || (transcript.length > 0 ? transcript[transcript.length - 1].text : "");
-    if (!rawText) return ["What happens when", "I type a", "URL into the", "browser?"];
-
-    // Filter out internal system logs
-    if (rawText.startsWith("[") && rawText.endsWith("]")) {
-      return ["Listening...", "(speech", "detected)"];
-    }
-
-    const words = rawText.split(/\s+/);
-    const pills: string[] = [];
-    let currentChunk: string[] = [];
-
-    words.forEach((w) => {
-      currentChunk.push(w);
-      if (currentChunk.length >= 3) {
-        pills.push(currentChunk.join(" "));
-        currentChunk = [];
-      }
-    });
-    if (currentChunk.length > 0) {
-      pills.push(currentChunk.join(" "));
-    }
-    return pills.slice(-4);
   };
 
   // Parse structured answer: TL;DR and bullets
@@ -397,46 +370,6 @@ export const PrateekOverlay: React.FC<Props> = ({
           </form>
         )}
 
-        {/* FLOATING LIVE SPEECH STREAM PILL BAR */}
-        <div className="prateek-hud-speech">
-          {/* Animated Green Waveform Audio Bars */}
-          <div className="prateek-audio-bars no-drag" title={isCapturing ? "Live Audio Capturing" : "Audio Muted"}>
-            <span className={`bar bar-1 ${isCapturing ? "bouncing" : ""}`} />
-            <span className={`bar bar-2 ${isCapturing ? "bouncing" : ""}`} />
-            <span className={`bar bar-3 ${isCapturing ? "bouncing" : ""}`} />
-          </div>
-
-          {/* Speech Chunks as Rounded Pills */}
-          <div className="prateek-speech-tokens-container no-drag">
-            {displaySpeechPills().map((pill, idx) => (
-              <span key={idx} className="prateek-token-pill">
-                {pill}
-              </span>
-            ))}
-          </div>
-
-          {/* Right Action: Clear and Expand */}
-          <div className="prateek-speech-actions no-drag">
-            <button
-              className="prateek-pill-btn prateek-pill-sm"
-              onClick={onClearTranscript}
-              title="Clear transcript (⌘ + Shift + Backspace)"
-            >
-              <span className="pill-text">Clear</span>
-              <span className="prateek-kbd">⌘⇧⌫</span>
-            </button>
-
-            <button
-              className="prateek-icon-pill-btn"
-              onClick={() => setIsCardCollapsed(!isCardCollapsed)}
-              title="Toggle Size"
-            >
-              {isCardCollapsed ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
-            </button>
-          </div>
-        </div>
-
-        {/* MAIN FLOATING ANSWER CARD */}
         {/* MAIN FLOATING QUESTION & ANSWER CARD */}
         {!isCardCollapsed && (
           <div className={`prateek-card no-drag ${cardTab === "split" ? "split-mode" : ""}`}>
