@@ -49,8 +49,40 @@ npm run dev
 
 Open [http://localhost:5173/](http://localhost:5173/) in Google Chrome or Microsoft Edge.
 
-### 2. Build for Production
+### 2. Build for Production (Web)
 ```bash
 npm run build
 npm run preview
 ```
+
+---
+
+## 🖥️ Desktop Application (macOS & Windows via Electron)
+
+StealthAI can be run and packaged as a standalone desktop application.
+
+### Run Desktop App in Development
+```bash
+npm run electron:dev
+```
+This concurrently starts the Vite dev server and launches the native Electron window.
+
+### Build Standalone Installers (.dmg / .exe)
+
+#### On macOS (Builds `.dmg` and `.zip`):
+```bash
+npm run electron:build:mac
+```
+The output `.dmg` installer will be located in the `release/` folder. Double-click to drag StealthAI into `/Applications`.
+
+#### On Windows (Builds `.exe` installer & portable binary):
+```bash
+npm run electron:build:win
+```
+The output `StealthAI Setup 1.0.0.exe` and portable `.exe` will be located in the `release/` folder.
+
+#### Build All:
+```bash
+npm run electron:dist
+```
+

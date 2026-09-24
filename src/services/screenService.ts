@@ -7,7 +7,7 @@ export class ScreenCaptureService {
     }
 
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: "browser" },
+      video: true,
       audio: false
     });
 
