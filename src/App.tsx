@@ -305,10 +305,10 @@ export default function App() {
       return;
     }
 
-    // Extract the latest/last question from full speech transcript
+    // Extract the latest/last question from the end of the speech transcript
     const extracted = extractLastQuestionFromSpeech(transcript, interimText);
     if (extracted.question && extracted.question.trim().length > 2) {
-      showToast(`Answering question: "${extracted.question.slice(0, 36)}..."`, "info");
+      showToast(`Answering: "${extracted.question.slice(0, 42)}..."`, "info");
       triggerGeneration(extracted.question.trim());
       return;
     }
@@ -318,7 +318,7 @@ export default function App() {
       return;
     }
 
-    triggerGeneration("What happens when I type a URL into the browser?");
+    showToast("Please turn on the mic and speak, then click Answer.", "info");
   };
 
   const handleClearCurrentAnswer = () => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Monitor,
   Mic,
@@ -17,13 +17,10 @@ import {
   X,
   LayoutGrid,
   Columns2,
-  MessageSquare,
   Sparkles,
-  Clock,
   AlertTriangle,
   Trash2
 } from "lucide-react";
-import { extractLastQuestionFromSpeech } from "../utils/speechExtractor";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
 
 interface Props {
@@ -77,17 +74,13 @@ export const PrateekOverlay: React.FC<Props> = ({
   const [chatInput, setChatInput] = useState("");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isCardCollapsed, setIsCardCollapsed] = useState(false);
-  const [cardTab, setCardTab] = useState<"question" | "answer" | "split">("split");
+  const [cardTab, setCardTab] = useState<"speech" | "answer" | "split">("split");
   const [copiedQuestion, setCopiedQuestion] = useState(false);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
   const [copiedSpeech, setCopiedSpeech] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
   const speechStreamEndRef = useRef<HTMLDivElement>(null);
-
-  const extractedSpeechQuestion = useMemo(() => {
-    return extractLastQuestionFromSpeech(transcript, interimText);
-  }, [transcript, interimText]);
 
   useEffect(() => {
     speechStreamEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -125,7 +118,7 @@ export const PrateekOverlay: React.FC<Props> = ({
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "1") {
         e.preventDefault();
-        setCardTab("question");
+        setCardTab("speech");
       } else if ((e.metaKey || e.ctrlKey) && e.key === "2") {
         e.preventDefault();
         setCardTab("answer");
@@ -425,12 +418,12 @@ export const PrateekOverlay: React.FC<Props> = ({
                 {/* Left & Right Segmented Tabs */}
                 <div className="prateek-segmented-tabs">
                   <button
-                    className={`prateek-tab-btn ${cardTab === "question" ? "active" : ""}`}
-                    onClick={() => setCardTab("question")}
-                    title="Question / What I Asked (⌘ + 1)"
+                    className={`prateek-tab-btn ${cardTab === "speech" ? "active" : ""}`}
+                    onClick={() => setCardTab("speech")}
+                    title="Live Speech Stream (⌘ + 1)"
                   >
-                    <MessageSquare size={13} />
-                    <span>Question</span>
+                    <Mic size={13} />
+                    <span>Speech</span>
                     <span className="tab-kbd">⌘1</span>
                   </button>
 
@@ -447,7 +440,7 @@ export const PrateekOverlay: React.FC<Props> = ({
                   <button
                     className={`prateek-tab-btn ${cardTab === "split" ? "active" : ""}`}
                     onClick={() => setCardTab("split")}
-                    title="Split: Question on Left, Answer on Right (⌘ + 3)"
+                    title="Split: Speech on Left, Answer on Right (⌘ + 3)"
                   >
                     <Columns2 size={13} />
                     <span>Split</span>
@@ -477,17 +470,17 @@ export const PrateekOverlay: React.FC<Props> = ({
 
             {/* CARD BODY: Tabs or Split View */}
             <div className={`prateek-card-body ${cardTab === "split" ? "split" : "single"}`}>
-              {/* LEFT TAB / COLUMN: WHAT I ASKED */}
-              {(cardTab === "question" || cardTab === "split") && (
+              {/* LEFT TAB / COLUMN: LIVE SPEECH STREAM */}
+              {(cardTab === "speech" || cardTab === "split") && (
                 <div className="prateek-question-panel">
                   <div className="prateek-panel-subhead">
                     <div className="subhead-left">
-                      <MessageSquare size={14} className="icon-sky" />
-                      <span className="subhead-title">Full Speech & Questions</span>
+                      <Mic size={14} className="icon-sky" />
+                      <span className="subhead-title">Speech Transcript</span>
                       {isCapturing && (
                         <div className="live-mic-status-badge">
                           <span className="live-pulse-dot" />
-                          <span>LIVE MIC</span>
+                          <span>LISTENING</span>
                         </div>
                       )}
                     </div>
@@ -527,68 +520,29 @@ export const PrateekOverlay: React.FC<Props> = ({
                     </div>
                   )}
 
-                  {/* LAST QUESTION DETECTED HERO CARD */}
-                  {extractedSpeechQuestion.question ? (
-                    <div className="prateek-detected-question-card">
-                      <div className="detected-q-header">
-                        <div className="detected-q-tag-group">
-                          <Sparkles size={12} className="text-amber-400" />
-                          <span className="detected-q-label">Last Question Picked From Speech</span>
-                        </div>
-                        <button
-                          className="btn-detected-answer-action"
-                          onClick={() => onTriggerAnswer(extractedSpeechQuestion.question)}
-                          title="Answer this question (⌘ + Enter)"
-                        >
-                          <span>Answer Spoken</span>
-                          <span className="prateek-kbd">⌘↵</span>
-                        </button>
-                      </div>
-                      <p className="detected-q-text">"{extractedSpeechQuestion.question}"</p>
-                    </div>
-                  ) : activeResponse ? (
-                    <div className="prateek-question-box">
-                      <p className="prateek-question-text">{activeResponse.prompt}</p>
-                    </div>
-                  ) : null}
-
-                  {/* FULL SPEECH TRANSCRIPT STREAM CONTAINER */}
+                  {/* LIVE SPEECH TRANSCRIPT STREAM CONTAINER */}
                   <div className="prateek-speech-stream-container">
                     {transcript.length === 0 && !isCapturing && (
                       <div className="prateek-empty-speech-state">
-                        <Mic size={22} className="text-slate-500" />
-                        <p className="empty-speech-title">Microphone is Ready</p>
+                        <Mic size={24} className="text-slate-500" />
+                        <p className="empty-speech-title">Live Speech Transcript</p>
                         <p className="empty-speech-desc">
-                          Turn on the mic (●) to capture the interviewer's speech. The entire dialogue streams here in real time.
+                          Turn on the mic (●) or press ⌘M. Everything spoken will display here in real time.
                         </p>
                       </div>
                     )}
 
-                    {transcript.map((item) => {
-                      const isQuestion =
-                        item.text.includes("?") ||
-                        /^(what|how|why|can you|could you|explain|tell me|design|describe)/i.test(item.text.trim());
-                      return (
-                        <div key={item.id} className={`prateek-speech-turn ${isQuestion ? "question-turn" : ""}`}>
-                          <div className="speech-turn-meta">
-                            <span className={`speaker-badge ${item.speaker.toLowerCase()}`}>
-                              {item.speaker}
-                            </span>
-                            <span className="speech-turn-time">{item.timestamp}</span>
-                            {isQuestion && (
-                              <button
-                                className="btn-turn-answer-mini"
-                                onClick={() => onTriggerAnswer(item.text)}
-                                title="Answer this question"
-                              >
-                                <span>Answer This</span>
-                              </button>
-                            )}
-                          </div>
-                          <p className="speech-turn-text">{item.text}</p>
+                    {transcript.map((item) => (
+                      <div key={item.id} className="prateek-speech-turn">
+                        <div className="speech-turn-meta">
+                          <span className={`speaker-badge ${item.speaker.toLowerCase()}`}>
+                            {item.speaker}
+                          </span>
+                          <span className="speech-turn-time">{item.timestamp}</span>
                         </div>
-                      );
-                    })}
+                        <p className="speech-turn-text">{item.text}</p>
+                      </div>
+                    ))}
 
                     {/* LIVE INTERIM STREAM (while someone is speaking right now) */}
                     {isCapturing && (
@@ -600,40 +554,11 @@ export const PrateekOverlay: React.FC<Props> = ({
                         <p className="live-interim-text">
                           {interimText.trim()
                             ? interimText.trim()
-                            : "Listening... speak into your microphone"}
+                            : "Listening to microphone speech..."}
                         </p>
                       </div>
                     )}
                     <div ref={speechStreamEndRef} />
-                  </div>
-
-                  {/* Quick Try Sample Prompts */}
-                  <div className="prateek-quick-test-bar">
-                    <span className="quick-test-hint">Try:</span>
-                    <button
-                      className="btn-quick-sample"
-                      onClick={() => onTriggerAnswer("Design a distributed rate limiter with sliding window")}
-                    >
-                      Rate Limiter
-                    </button>
-                    <button
-                      className="btn-quick-sample"
-                      onClick={() => onTriggerAnswer("How to invert a binary tree in TypeScript?")}
-                    >
-                      Invert Tree
-                    </button>
-                    <button
-                      className="btn-quick-sample"
-                      onClick={() => onTriggerAnswer("Hey tell me about Java 11?")}
-                    >
-                      Java 11
-                    </button>
-                    <button
-                      className="btn-quick-sample"
-                      onClick={() => onTriggerAnswer("Explain the CAP theorem and distributed systems")}
-                    >
-                      CAP Theorem
-                    </button>
                   </div>
 
                   {/* Screen Snapshot Context (if available) */}
@@ -651,32 +576,6 @@ export const PrateekOverlay: React.FC<Props> = ({
                     </div>
                   )}
 
-                  {/* Session Questions History */}
-                  {responseHistory.length > 0 && (
-                    <div className="prateek-history-questions-box">
-                      <div className="history-header-row">
-                        <Clock size={12} />
-                        <span>All Questions Asked ({responseHistory.length})</span>
-                      </div>
-                      <div className="history-questions-scroll">
-                        {responseHistory.map((item, idx) => {
-                          const isSelected = activeResponse?.id === item.id;
-                          return (
-                            <button
-                              key={item.id}
-                              className={`history-q-item ${isSelected ? "selected" : ""}`}
-                              onClick={() => onSelectResponse(item.id)}
-                              title={item.prompt}
-                            >
-                              <span className="q-badge">#{responseHistory.length - idx}</span>
-                              <span className="q-text">{item.prompt}</span>
-                              <span className="q-time">{item.timestamp}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -704,6 +603,14 @@ export const PrateekOverlay: React.FC<Props> = ({
                       </button>
                     </div>
                   </div>
+
+                  {/* Display the Question extracted from the end of speech */}
+                  {activeResponse?.prompt && (
+                    <div className="prateek-solution-question-badge">
+                      <span className="solution-q-label">Q:</span>
+                      <span className="solution-q-text">{activeResponse.prompt}</span>
+                    </div>
+                  )}
 
                   {/* Star TL;DR Summary */}
                   <div className="prateek-tldr-line">
