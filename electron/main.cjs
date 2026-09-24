@@ -1,6 +1,12 @@
 const { app, BrowserWindow, session, desktopCapturer, ipcMain, shell } = require('electron');
 const path = require('path');
 
+// Pass Google API Key if provided via environment
+if (process.env.GOOGLE_API_KEY) {
+  app.commandLine.appendSwitch('google-api-key', process.env.GOOGLE_API_KEY);
+}
+app.commandLine.appendSwitch('enable-speech-dispatcher');
+
 const isDev = !app.isPackaged || process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
 let mainWindow = null;

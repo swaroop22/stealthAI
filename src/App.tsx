@@ -94,6 +94,7 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem("stealthai_gemini_key", apiKey);
+    SpeechService.setApiKey(apiKey);
   }, [apiKey]);
 
   // Determine mode automatically from prompt
@@ -228,6 +229,7 @@ export default function App() {
       showToast("Captions paused.", "info");
     } else {
       SpeechService.setSpeaker(activeSpeaker);
+      SpeechService.setApiKey(apiKey);
       const success = await SpeechService.startListening(
         (finalItem) => {
           setTranscript((prev) => [...prev, finalItem]);

@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron . --dev\"",
     "electron:pack": "npm run build && electron-builder --dir",
-    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:mac": "npm run build && electron-builder --mac --arm64",
+    "electron:build:mac:arm64": "npm run build && electron-builder --mac --arm64",
+    "electron:build:mac:universal": "npm run build && electron-builder --mac --universal",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:dist": "npm run build && electron-builder -mw"
   },
@@ -51,8 +53,14 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["arm64"]
+        }
       ],
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",

@@ -41,6 +41,60 @@ export class AIEngine {
     await this.streamLocalEngine(prompt, mode, profile, snippet, callbacks, signal);
   }
 
+  public static async transcribeAudio(blob: Blob, apiKey: string): Promise<string> {
+    if (!apiKey || !apiKey.startsWith("AIza")) {
+      return "";
+    }
+    const base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        const base64 = result.includes(",") ? result.split(",")[1] : result;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const rawMime = blob.type || "audio/webm";
+    const mimeType = rawMime.split(";")[0];
+    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey.trim();
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Data
+                }
+              },
+              {
+                text: "Transcribe the spoken words in this audio snippet accurately. Output ONLY the raw transcribed words with normal punctuation. Do not add quotes, commentary, or Markdown formatting. If no speech is present, return nothing."
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 256
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Speech Transcription HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    return candidateText ? candidateText.trim() : "";
+  }
+
   private static async streamGeminiAPI(
     prompt: string,
     mode: AssistantMode,
