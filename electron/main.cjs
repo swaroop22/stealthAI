@@ -95,6 +95,7 @@ function createWindow() {
   }
 
   mainWindow.on('closed', () => {
+    stopSpeechProcess();
     mainWindow = null;
   });
 }
@@ -132,6 +133,89 @@ ipcMain.handle('get-screen-sources', async () => {
   }
 });
 
+// NATIVE REAL-TIME MACOS SPEECH RECOGNITION (SFSpeechRecognizer)
+const { spawn } = require('child_process');
+const readline = require('readline');
+const fs = require('fs');
+
+let speechProcess = null;
+
+function stopSpeechProcess() {
+  if (speechProcess) {
+    try {
+      speechProcess.stdin.write('stop\n');
+    } catch (e) {}
+    try {
+      speechProcess.kill('SIGTERM');
+    } catch (e) {}
+    speechProcess = null;
+  }
+}
+
+ipcMain.on('start-native-speech', () => {
+  stopSpeechProcess();
+
+  const candidatePaths = [
+    path.join(__dirname, 'stealth_speech_helper'),
+    path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'stealth_speech_helper'),
+    path.join(process.resourcesPath, 'electron', 'stealth_speech_helper'),
+    path.join(path.dirname(process.execPath), 'stealth_speech_helper'),
+    path.join(path.dirname(process.execPath), '..', 'Resources', 'electron', 'stealth_speech_helper')
+  ];
+
+  const binPath = candidatePaths.find((p) => fs.existsSync(p));
+  if (!binPath) {
+    console.warn('Native speech helper binary not found at candidates:', candidatePaths);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('native-speech-event', {
+        type: 'error',
+        message: 'Speech helper binary not found.'
+      });
+    }
+    return;
+  }
+
+  try {
+    speechProcess = spawn(binPath, [], {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const rl = readline.createInterface({
+      input: speechProcess.stdout,
+      terminal: false
+    });
+
+    rl.on('line', (line) => {
+      try {
+        const data = JSON.parse(line.trim());
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('native-speech-event', data);
+        }
+      } catch (e) {}
+    });
+
+    speechProcess.stderr.on('data', (err) => {
+      console.warn('Native speech helper stderr:', err.toString());
+    });
+
+    speechProcess.on('exit', (code) => {
+      speechProcess = null;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('native-speech-event', { type: 'stopped', code });
+      }
+    });
+  } catch (err) {
+    console.error('Failed to spawn speech helper:', err);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('native-speech-event', { type: 'error', message: err.message });
+    }
+  }
+});
+
+ipcMain.on('stop-native-speech', () => {
+  stopSpeechProcess();
+});
+
 app.whenReady().then(() => {
   createWindow();
 
@@ -146,4 +230,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  stopSpeechProcess();
 });

@@ -11,11 +11,12 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "build:speech-helper": "clang -O3 -fobjc-arc -framework Foundation -framework AVFoundation -framework Speech electron/stealth_speech_helper.m -o electron/stealth_speech_helper",
     "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron . --dev\"",
     "electron:pack": "npm run build && electron-builder --dir",
-    "electron:build:mac": "npm run build && electron-builder --mac --arm64",
-    "electron:build:mac:arm64": "npm run build && electron-builder --mac --arm64",
-    "electron:build:mac:universal": "npm run build && electron-builder --mac --universal",
+    "electron:build:mac": "npm run build && npm run build:speech-helper && electron-builder --mac --arm64",
+    "electron:build:mac:arm64": "npm run build && npm run build:speech-helper && electron-builder --mac --arm64",
+    "electron:build:mac:universal": "npm run build && npm run build:speech-helper && electron-builder --mac --universal",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:dist": "npm run build && electron-builder -mw"
   },
@@ -50,6 +51,9 @@
       "electron/**/*",
       "package.json"
     ],
+    "asarUnpack": [
+      "electron/stealth_speech_helper"
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
@@ -64,7 +68,11 @@
       ],
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.plist",
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "StealthAI requires microphone access to transcribe interview speech in real-time.",
+        "NSSpeechRecognitionUsageDescription": "StealthAI uses Apple Speech Recognition to display live conversation instantly."
+      }
     },
     "dmg": {
       "contents": [

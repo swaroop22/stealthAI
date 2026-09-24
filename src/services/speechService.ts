@@ -30,11 +30,15 @@ export class SpeechService {
   private static storedOnFinal: SpeechCallback | null = null;
   private static storedOnInterim: InterimCallback | null = null;
   private static storedOnError: ((err: string) => void) | null = null;
+  private static nativeSpeechUnsubscribe: (() => void) | null = null;
+  private static usingNativeSpeech: boolean = false;
 
   public static isSupported(): boolean {
     return (
       typeof window !== "undefined" &&
-      (("webkitSpeechRecognition" in window || "SpeechRecognition" in window) ||
+      (Boolean((window as any).electronAPI?.startNativeSpeech) ||
+        "webkitSpeechRecognition" in window ||
+        "SpeechRecognition" in window ||
         (navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia))
     );
   }
@@ -71,7 +75,53 @@ export class SpeechService {
     this.storedOnInterim = onInterim;
     this.storedOnError = onError;
 
-    // 1. Initialize microphone stream
+    // 1. Try Native macOS On-Device Speech Recognizer via Electron API first (0ms delay, word-by-word streaming)
+    const electron = (window as any).electronAPI;
+    if (electron?.startNativeSpeech && electron?.onNativeSpeech && electron.platform === "darwin") {
+      try {
+        if (this.nativeSpeechUnsubscribe) {
+          this.nativeSpeechUnsubscribe();
+          this.nativeSpeechUnsubscribe = null;
+        }
+
+        this.nativeSpeechUnsubscribe = electron.onNativeSpeech((data: any) => {
+          if (!this.isListening) return;
+
+          if (data.type === "interim") {
+            if (this.storedOnInterim && data.text) {
+              this.storedOnInterim(data.text);
+            }
+          } else if (data.type === "final") {
+            if (this.storedOnFinal && data.text && data.text.trim().length > 0) {
+              this.storedOnFinal({
+                id: crypto.randomUUID(),
+                timestamp: new Intl.DateTimeFormat("en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                }).format(new Date()),
+                speaker: this.activeSpeaker,
+                text: data.text.trim(),
+              });
+              if (this.storedOnInterim) {
+                this.storedOnInterim("");
+              }
+            }
+          } else if (data.type === "error") {
+            console.warn("Native speech notice:", data.message);
+          }
+        });
+
+        electron.startNativeSpeech();
+        this.isListening = true;
+        this.usingNativeSpeech = true;
+        return true;
+      } catch (nativeErr) {
+        console.warn("Native speech start failed, falling back:", nativeErr);
+      }
+    }
+
+    // 2. Fallback: Initialize microphone stream
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         if (!this.mediaStream) {
@@ -110,10 +160,10 @@ export class SpeechService {
 
     this.isListening = true;
 
-    // 2. Start VAD (Voice Activity Detection) recorder fallback for Electron / non-Chrome
+    // 3. Start VAD (Voice Activity Detection) recorder fallback for offline/non-Chrome
     this.startVADRecording();
 
-    // 3. If Web Speech API is supported and hasn't permanently failed with network error, attempt it
+    // 4. If Web Speech API is supported and hasn't permanently failed with network error, attempt it
     if (!this.webSpeechDisabled && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
       this.createAndStartRecognition();
       this.startWatchdog();
@@ -373,6 +423,18 @@ export class SpeechService {
     if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     if (this.vadInterval) clearInterval(this.vadInterval);
+
+    if (this.usingNativeSpeech) {
+      const electron = (window as any).electronAPI;
+      if (electron?.stopNativeSpeech) {
+        electron.stopNativeSpeech();
+      }
+      if (this.nativeSpeechUnsubscribe) {
+        this.nativeSpeechUnsubscribe();
+        this.nativeSpeechUnsubscribe = null;
+      }
+      this.usingNativeSpeech = false;
+    }
 
     if (this.mediaRecorder && this.isRecordingAudio) {
       try {
