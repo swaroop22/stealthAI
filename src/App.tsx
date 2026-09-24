@@ -21,6 +21,7 @@ import type {
   SpeakerType
 } from "./types";
 import { AlertCircle, CheckCircle2, LayoutGrid, Layers } from "lucide-react";
+import { extractLastQuestionFromSpeech } from "./utils/speechExtractor";
 import "./App.css";
 
 const DEFAULT_PROFILE: CandidateProfile = {
@@ -82,12 +83,12 @@ export default function App() {
   const [responses, setResponses] = useState<AIResponse[]>([DEFAULT_INITIAL_RESPONSE]);
   const [activeResponseId, setActiveResponseId] = useState<string | null>("initial-url-browser-response");
 
-  const [autoAnswer, setAutoAnswer] = useState<boolean>(true);
+  const [autoAnswer, setAutoAnswer] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
 
-  const autoAnswerRef = useRef<boolean>(true);
+  const autoAnswerRef = useRef<boolean>(false);
   const speechAccumulatorRef = useRef<string>("");
   const autoAnswerTimerRef = useRef<any>(null);
   const lastTriggerTimeRef = useRef<number>(0);
@@ -269,43 +270,6 @@ export default function App() {
         (finalItem) => {
           setTranscript((prev) => [...prev, finalItem]);
           setInterimText("");
-
-          // AUTO-ANSWER WITH INTELLIGENT BUFFERING & COOLDOWN:
-          const trimmedItem = finalItem.text.trim();
-          const isSystemNotice = trimmedItem.startsWith("[") && trimmedItem.endsWith("]");
-
-          if (autoAnswerRef.current && trimmedItem.length > 1 && !isSystemNotice) {
-            speechAccumulatorRef.current = (speechAccumulatorRef.current + " " + trimmedItem).trim();
-
-            if (autoAnswerTimerRef.current) {
-              clearTimeout(autoAnswerTimerRef.current);
-            }
-
-            autoAnswerTimerRef.current = setTimeout(() => {
-              const fullQuestion = speechAccumulatorRef.current.trim();
-              const words = fullQuestion.split(/\s+/).filter(Boolean);
-              const cleanLower = fullQuestion.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
-
-              const FILLERS = [
-                "what", "what?", "is that all", "is that all?", "yeah", "ok", "okay",
-                "um", "uh", "yes", "no", "sure", "right", "i see", "got it", "hello",
-                "hi", "thanks", "thank you", "bye", "goodbye"
-              ];
-              const isFiller = FILLERS.includes(cleanLower) || (words.length < 3 && fullQuestion.length < 14);
-
-              // Only trigger automatically on substantive questions (at least 3 words, >= 14 chars, not filler)
-              if (!isFiller && fullQuestion.length >= 14 && !fullQuestion.startsWith("[")) {
-                const now = Date.now();
-                // Cooldown: prevent spamming more than 1 request per 3.5 seconds
-                if (now - lastTriggerTimeRef.current >= 3500 && !isGeneratingRef.current) {
-                  lastTriggerTimeRef.current = now;
-                  showToast(`Answering: "${fullQuestion.slice(0, 32)}..."`, "info");
-                  triggerGenRef.current(fullQuestion);
-                  speechAccumulatorRef.current = "";
-                }
-              }
-            }, 2200);
-          }
         },
         (interim) => {
           setInterimText(interim);
@@ -340,15 +304,21 @@ export default function App() {
       triggerGeneration(promptOverride.trim());
       return;
     }
-    const validTranscripts = transcript.filter((t) => !t.text.trim().startsWith("["));
-    const latestSpoken = speechAccumulatorRef.current.trim() || (validTranscripts.length > 0 ? validTranscripts[validTranscripts.length - 1].text : "");
-    if (latestSpoken && !latestSpoken.startsWith("[")) {
-      triggerGeneration(latestSpoken);
-    } else if (activeSnippet) {
-      triggerGeneration("Analyze the problem from the screen snapshot.", "coding");
-    } else {
-      triggerGeneration("What happens when I type a URL into the browser?");
+
+    // Extract the latest/last question from full speech transcript
+    const extracted = extractLastQuestionFromSpeech(transcript, interimText);
+    if (extracted.question && extracted.question.trim().length > 2) {
+      showToast(`Answering question: "${extracted.question.slice(0, 36)}..."`, "info");
+      triggerGeneration(extracted.question.trim());
+      return;
     }
+
+    if (activeSnippet) {
+      triggerGeneration("Analyze the problem from the screen snapshot.", "coding");
+      return;
+    }
+
+    triggerGeneration("What happens when I type a URL into the browser?");
   };
 
   const handleClearCurrentAnswer = () => {

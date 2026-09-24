@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Monitor,
   Mic,
@@ -20,8 +20,10 @@ import {
   MessageSquare,
   Sparkles,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Trash2
 } from "lucide-react";
+import { extractLastQuestionFromSpeech } from "../utils/speechExtractor";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
 
 interface Props {
@@ -78,7 +80,28 @@ export const PrateekOverlay: React.FC<Props> = ({
   const [cardTab, setCardTab] = useState<"question" | "answer" | "split">("split");
   const [copiedQuestion, setCopiedQuestion] = useState(false);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
+  const [copiedSpeech, setCopiedSpeech] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+
+  const speechStreamEndRef = useRef<HTMLDivElement>(null);
+
+  const extractedSpeechQuestion = useMemo(() => {
+    return extractLastQuestionFromSpeech(transcript, interimText);
+  }, [transcript, interimText]);
+
+  useEffect(() => {
+    speechStreamEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcript.length, interimText]);
+
+  const handleCopyFullSpeech = () => {
+    const validItems = transcript.filter((t) => !t.text.trim().startsWith("["));
+    const fullText = validItems.map((t) => `[${t.timestamp}] ${t.speaker}: ${t.text}`).join("\n");
+    if (!fullText) return;
+    navigator.clipboard.writeText(fullText);
+    setCopiedSpeech(true);
+    setTimeout(() => setCopiedSpeech(false), 1800);
+    showToast("Full speech transcript copied", "success");
+  };
 
   // Dynamically shrink or expand Electron window based on card collapse and tab state
   useEffect(() => {
@@ -460,53 +483,33 @@ export const PrateekOverlay: React.FC<Props> = ({
                   <div className="prateek-panel-subhead">
                     <div className="subhead-left">
                       <MessageSquare size={14} className="icon-sky" />
-                      <span className="subhead-title">What I Asked</span>
-                      {activeResponse?.mode && (
-                        <span className="mode-pill">{activeResponse.mode.replace("_", " ")}</span>
+                      <span className="subhead-title">Full Speech & Questions</span>
+                      {isCapturing && (
+                        <div className="live-mic-status-badge">
+                          <span className="live-pulse-dot" />
+                          <span>LIVE MIC</span>
+                        </div>
                       )}
                     </div>
                     <div className="subhead-right">
-                      <span className="subhead-timestamp">
-                        {activeResponse?.timestamp || "Just now"}
-                      </span>
+                      {transcript.length > 0 && (
+                        <button
+                          className="prateek-copy-icon-btn"
+                          onClick={onClearTranscript}
+                          title="Clear Full Speech"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                       <button
                         className="prateek-copy-icon-btn"
-                        onClick={handleCopyQuestion}
-                        title="Copy Question"
+                        onClick={handleCopyFullSpeech}
+                        title="Copy Full Speech Transcript"
                       >
-                        {copiedQuestion ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                        {copiedSpeech ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                       </button>
                     </div>
                   </div>
-
-                  {/* LIVE MICROPHONE SPEECH STREAM (Shows what you are talking in real time) */}
-                  {isCapturing && (
-                    <div className="prateek-live-speech-card">
-                      <div className="live-speech-head">
-                        <div className="live-indicator-wrapper">
-                          <span className="live-pulse-dot" />
-                          <span className="live-mic-title">{activeSpeaker} Speaking (Live Stream)</span>
-                        </div>
-                        {interimText.trim() && !interimText.startsWith("🎤") && !interimText.startsWith("⚡") && !interimText.startsWith("⚠️") && (
-                          <button
-                            className="btn-live-answer-action"
-                            onClick={() => onTriggerAnswer(interimText.trim())}
-                            title="Answer Spoken Words (⌘↵)"
-                          >
-                            <span>Answer Spoken</span>
-                            <span className="prateek-kbd">⌘↵</span>
-                          </button>
-                        )}
-                      </div>
-                      <p className="live-speech-content">
-                        {interimText.trim()
-                          ? interimText.startsWith("🎤") || interimText.startsWith("⚡") || interimText.startsWith("⚠️")
-                            ? interimText.trim()
-                            : `"${interimText.trim()}"`
-                          : "Listening... speak into your microphone"}
-                      </p>
-                    </div>
-                  )}
 
                   {/* API KEY SETUP BANNER IF NOT CONFIGURED */}
                   {(!apiKey || apiKey.trim().length < 15) && (
@@ -524,13 +527,84 @@ export const PrateekOverlay: React.FC<Props> = ({
                     </div>
                   )}
 
-                  {/* Primary Prompt Text Box */}
-                  <div className="prateek-question-box">
-                    <p className="prateek-question-text">
-                      {activeResponse
-                        ? activeResponse.prompt
-                        : "What happens when I type a URL into the browser?"}
-                    </p>
+                  {/* LAST QUESTION DETECTED HERO CARD */}
+                  {extractedSpeechQuestion.question ? (
+                    <div className="prateek-detected-question-card">
+                      <div className="detected-q-header">
+                        <div className="detected-q-tag-group">
+                          <Sparkles size={12} className="text-amber-400" />
+                          <span className="detected-q-label">Last Question Picked From Speech</span>
+                        </div>
+                        <button
+                          className="btn-detected-answer-action"
+                          onClick={() => onTriggerAnswer(extractedSpeechQuestion.question)}
+                          title="Answer this question (⌘ + Enter)"
+                        >
+                          <span>Answer Spoken</span>
+                          <span className="prateek-kbd">⌘↵</span>
+                        </button>
+                      </div>
+                      <p className="detected-q-text">"{extractedSpeechQuestion.question}"</p>
+                    </div>
+                  ) : activeResponse ? (
+                    <div className="prateek-question-box">
+                      <p className="prateek-question-text">{activeResponse.prompt}</p>
+                    </div>
+                  ) : null}
+
+                  {/* FULL SPEECH TRANSCRIPT STREAM CONTAINER */}
+                  <div className="prateek-speech-stream-container">
+                    {transcript.length === 0 && !isCapturing && (
+                      <div className="prateek-empty-speech-state">
+                        <Mic size={22} className="text-slate-500" />
+                        <p className="empty-speech-title">Microphone is Ready</p>
+                        <p className="empty-speech-desc">
+                          Turn on the mic (●) to capture the interviewer's speech. The entire dialogue streams here in real time.
+                        </p>
+                      </div>
+                    )}
+
+                    {transcript.map((item) => {
+                      const isQuestion =
+                        item.text.includes("?") ||
+                        /^(what|how|why|can you|could you|explain|tell me|design|describe)/i.test(item.text.trim());
+                      return (
+                        <div key={item.id} className={`prateek-speech-turn ${isQuestion ? "question-turn" : ""}`}>
+                          <div className="speech-turn-meta">
+                            <span className={`speaker-badge ${item.speaker.toLowerCase()}`}>
+                              {item.speaker}
+                            </span>
+                            <span className="speech-turn-time">{item.timestamp}</span>
+                            {isQuestion && (
+                              <button
+                                className="btn-turn-answer-mini"
+                                onClick={() => onTriggerAnswer(item.text)}
+                                title="Answer this question"
+                              >
+                                <span>Answer This</span>
+                              </button>
+                            )}
+                          </div>
+                          <p className="speech-turn-text">{item.text}</p>
+                        </div>
+                      );
+                    })}
+
+                    {/* LIVE INTERIM STREAM (while someone is speaking right now) */}
+                    {isCapturing && (
+                      <div className="prateek-live-interim-bubble">
+                        <div className="live-interim-header">
+                          <span className="live-pulse-dot" />
+                          <span className="live-interim-title">{activeSpeaker} Speaking (Live)...</span>
+                        </div>
+                        <p className="live-interim-text">
+                          {interimText.trim()
+                            ? interimText.trim()
+                            : "Listening... speak into your microphone"}
+                        </p>
+                      </div>
+                    )}
+                    <div ref={speechStreamEndRef} />
                   </div>
 
                   {/* Quick Try Sample Prompts */}
@@ -547,6 +621,12 @@ export const PrateekOverlay: React.FC<Props> = ({
                       onClick={() => onTriggerAnswer("How to invert a binary tree in TypeScript?")}
                     >
                       Invert Tree
+                    </button>
+                    <button
+                      className="btn-quick-sample"
+                      onClick={() => onTriggerAnswer("Hey tell me about Java 11?")}
+                    >
+                      Java 11
                     </button>
                     <button
                       className="btn-quick-sample"

@@ -2813,6 +2813,238 @@ pre {
   word-break: break-word;
 }
 
+/* Live mic badge */
+.live-mic-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 9999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #4ade80;
+  letter-spacing: 0.05em;
+}
+
+/* Detected Last Question Hero Card */
+.prateek-detected-question-card {
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.35) 0%, rgba(15, 23, 42, 0.6) 100%);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.detected-q-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.detected-q-tag-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.detected-q-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #38bdf8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.btn-detected-answer-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+  transition: all 0.15s ease;
+}
+
+.btn-detected-answer-action:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.detected-q-text {
+  font-size: 13px;
+  color: #f8fafc;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* Full Speech Stream Container */
+.prateek-speech-stream-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.prateek-speech-stream-container::-webkit-scrollbar {
+  width: 4px;
+}
+.prateek-speech-stream-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+
+.prateek-speech-turn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: background 0.15s ease;
+}
+
+.prateek-speech-turn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.prateek-speech-turn.question-turn {
+  border-left: 2px solid #38bdf8;
+  background: rgba(56, 189, 248, 0.04);
+}
+
+.speech-turn-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.speaker-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.speaker-badge.interviewer {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.speaker-badge.candidate {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+
+.speech-turn-time {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.btn-turn-answer-mini {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-size: 9.5px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-turn-answer-mini:hover {
+  background: rgba(56, 189, 248, 0.2);
+  color: #ffffff;
+}
+
+.speech-turn-text {
+  font-size: 12px;
+  color: #e2e8f0;
+  line-height: 1.45;
+  margin: 0;
+  word-break: break-word;
+}
+
+/* Live Interim Bubble */
+.prateek-live-interim-bubble {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  border-radius: 8px;
+  padding: 6px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.live-interim-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.live-interim-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: #38bdf8;
+  text-transform: uppercase;
+}
+
+.live-interim-text {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Empty speech placeholder */
+.prateek-empty-speech-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px 14px;
+  gap: 6px;
+}
+
+.empty-speech-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.empty-speech-desc {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+  max-width: 280px;
+}
+
 /* API KEY SETUP ALERT */
 .prateek-api-alert {
   display: flex;
