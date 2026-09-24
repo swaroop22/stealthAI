@@ -44,16 +44,7 @@ interface Props {
   showToast: (text: string, type: "info" | "success" | "error") => void;
 }
 
-const DEFAULT_FALLBACK_TRANSCRIPT: TranscriptItem[] = [
-  { id: "sample-1", timestamp: "03:56 PM", speaker: "Candidate", text: "Yeah." },
-  { id: "sample-2", timestamp: "03:57 PM", speaker: "Candidate", text: "So. Then I could." },
-  { id: "sample-3", timestamp: "03:57 PM", speaker: "Candidate", text: "China." },
-  { id: "sample-4", timestamp: "03:57 PM", speaker: "Candidate", text: "Okay. So." },
-  { id: "sample-5", timestamp: "03:57 PM", speaker: "Candidate", text: "Of course." },
-  { id: "sample-6", timestamp: "03:57 PM", speaker: "Candidate", text: "You." },
-  { id: "sample-7", timestamp: "03:57 PM", speaker: "Candidate", text: "Didn't. Didn't. Know." },
-  { id: "sample-8", timestamp: "03:57 PM", speaker: "Candidate", text: "This." },
-];
+
 
 export const PrateekOverlay: React.FC<Props> = ({
   isCapturing,
@@ -170,14 +161,9 @@ export const PrateekOverlay: React.FC<Props> = ({
     const raw = content?.trim() || "";
     if (!raw) {
       return (
-        <div className="answer-text-flow">
-          <p className="answer-p-line">
-            I'm a <strong className="answer-bold-highlight">Lead Data Engineer</strong> with more than 15 years of experience building and supporting enterprise data platforms across banking, healthcare, and pharmaceutical domains. My main strengths are <strong className="answer-bold-highlight">Python, SQL, Databricks, Apache Spark, dbt, Snowflake, and AWS</strong>.
-          </p>
-          <p className="answer-p-line">
-            In my current role at <strong className="answer-bold-highlight">PNC</strong>, I lead modern data stack initiatives and enterprise data lakehouse governance.
-          </p>
-        </div>
+        <p className="answer-p-line text-slate-400 italic">
+          No answer active. Turn on the mic and speak, then press <strong className="text-white">Ctrl + Enter</strong> to answer.
+        </p>
       );
     }
 
@@ -214,9 +200,6 @@ export const PrateekOverlay: React.FC<Props> = ({
       </div>
     );
   };
-
-  // Determine display transcript: use actual transcript, or default sample if pristine empty
-  const displayTranscript = transcript.length > 0 ? transcript : DEFAULT_FALLBACK_TRANSCRIPT;
 
   return (
     <div className="prateek-overlay-wrapper">
@@ -453,7 +436,10 @@ export const PrateekOverlay: React.FC<Props> = ({
                 <div className="card-toolbar-right">
                   <button
                     className="prateek-mini-clear-btn"
-                    onClick={onClearTranscript}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClearTranscript();
+                    }}
                     title="Clear Speech Transcript (Ctrl + Shift + Backspace)"
                   >
                     <span>Clear</span>
@@ -471,7 +457,13 @@ export const PrateekOverlay: React.FC<Props> = ({
 
               {/* Speech Chat Body: Right-aligned messages */}
               <div className="prateek-speech-chat-body">
-                {displayTranscript.map((item) => (
+                {transcript.length === 0 && !isCapturing && (
+                  <div className="prateek-empty-speech-state">
+                    <p className="empty-speech-desc">Transcript cleared. Turn on the mic to start listening.</p>
+                  </div>
+                )}
+
+                {transcript.map((item) => (
                   <div key={item.id} className="prateek-chat-message-row">
                     <div className="chat-message-text">{item.text}</div>
                     <div className="chat-message-meta">
@@ -522,7 +514,10 @@ export const PrateekOverlay: React.FC<Props> = ({
                 <div className="card-toolbar-right">
                   <button
                     className="prateek-mini-clear-btn"
-                    onClick={onClearCurrentAnswer}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClearCurrentAnswer();
+                    }}
                     title="Clear Answer (Ctrl + Backspace)"
                   >
                     <span>Clear</span>
@@ -540,39 +535,60 @@ export const PrateekOverlay: React.FC<Props> = ({
 
               {/* Answer Content Body */}
               <div className="prateek-answer-content-body">
-                {/* Question Row */}
-                <div className="answer-question-row">
-                  <div className="question-left">
-                    <span className="question-speech-icon">💬</span>
-                    <span className="question-label">Question:</span>
-                    <span className="question-text">
-                      {activeResponse?.prompt || "Explain yourself"}
-                    </span>
-                  </div>
-                  <button
-                    className="question-copy-btn"
-                    onClick={handleCopyQuestion}
-                    title="Copy Question"
-                  >
-                    {copiedQuestion ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-                  </button>
-                </div>
-
-                {/* Answer Main Content */}
-                <div className="answer-main-content">
-                  <div className="answer-star-row">
-                    <span className="star-icon">⭐</span>
-                    <strong className="answer-bold-label">Answer:</strong>
-                  </div>
-                  {renderFormattedAnswer(activeResponse?.content)}
-
-                  {activeResponse?.isStreaming && (
-                    <div className="answer-streaming-pulse">
-                      <span className="live-pulse-dot" />
-                      <span>Generating answer...</span>
+                {activeResponse ? (
+                  <>
+                    {/* Question Row */}
+                    <div className="answer-question-row">
+                      <div className="question-left">
+                        <span className="question-speech-icon">💬</span>
+                        <span className="question-label">Question:</span>
+                        <span className="question-text">
+                          {activeResponse.prompt}
+                        </span>
+                      </div>
+                      <button
+                        className="question-copy-btn"
+                        onClick={handleCopyQuestion}
+                        title="Copy Question"
+                      >
+                        {copiedQuestion ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                      </button>
                     </div>
-                  )}
-                </div>
+
+                    {/* Answer Main Content */}
+                    <div className="answer-main-content">
+                      <div className="answer-star-row">
+                        <span className="star-icon">⭐</span>
+                        <strong className="answer-bold-label">Answer:</strong>
+                      </div>
+                      {renderFormattedAnswer(activeResponse.content)}
+
+                      {activeResponse.isStreaming && (
+                        <div className="answer-streaming-pulse">
+                          <span className="live-pulse-dot" />
+                          <span>Generating answer...</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="answer-empty-state">
+                    <div className="answer-question-row">
+                      <div className="question-left">
+                        <span className="question-speech-icon">💬</span>
+                        <span className="question-label">Question:</span>
+                        <span className="question-text text-slate-500 font-normal italic">
+                          No question active
+                        </span>
+                      </div>
+                    </div>
+                    <div className="answer-main-content">
+                      <p className="answer-p-line text-slate-400 italic">
+                        Answer cleared. Turn on the mic and speak, then press <strong className="text-white">Ctrl + Enter</strong> to answer.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Bottom resize/expand indicator */}
                 <div className="answer-card-bottom-actions">

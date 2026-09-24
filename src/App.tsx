@@ -332,10 +332,14 @@ export default function App() {
 
   const handleClearCurrentAnswer = () => {
     if (activeResponseId) {
-      setResponses((prev) => prev.filter((r) => r.id !== activeResponseId));
+      const remaining = responses.filter((r) => r.id !== activeResponseId);
+      setResponses(remaining);
       setActiveResponseId(null);
-      showToast("Answer cleared", "info");
+    } else {
+      setResponses([]);
+      setActiveResponseId(null);
     }
+    showToast("Answer cleared", "info");
   };
 
   // Keyboard Shortcuts (⌘ + Enter, ⌘ + Shift + Enter, ⌘ + Backspace, ⌘ + ←, ⌘ + →)
