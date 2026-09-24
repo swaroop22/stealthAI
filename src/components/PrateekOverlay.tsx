@@ -19,7 +19,8 @@ import {
   Columns2,
   MessageSquare,
   Sparkles,
-  Clock
+  Clock,
+  AlertTriangle
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
 
@@ -33,6 +34,7 @@ interface Props {
   activeSnippet: ScreenSnippet | null;
   consent: ConsentAudit;
   profile: CandidateProfile;
+  apiKey?: string;
   onToggleCapture: () => void;
   onCaptureScreenshot: () => void;
   onTriggerAnswer: (promptOverride?: string) => void;
@@ -56,6 +58,7 @@ export const PrateekOverlay: React.FC<Props> = ({
   activeSnippet,
   consent,
   profile,
+  apiKey = "",
   onToggleCapture,
   onCaptureScreenshot,
   onTriggerAnswer,
@@ -476,6 +479,49 @@ export const PrateekOverlay: React.FC<Props> = ({
                     </div>
                   </div>
 
+                  {/* LIVE MICROPHONE SPEECH STREAM (Shows what you are talking in real time) */}
+                  {isCapturing && (
+                    <div className="prateek-live-speech-card">
+                      <div className="live-speech-head">
+                        <div className="live-indicator-wrapper">
+                          <span className="live-pulse-dot" />
+                          <span className="live-mic-title">{activeSpeaker} Speaking (Live Stream)</span>
+                        </div>
+                        {interimText.trim() && (
+                          <button
+                            className="btn-live-answer-action"
+                            onClick={() => onTriggerAnswer(interimText.trim())}
+                            title="Answer Spoken Words (⌘↵)"
+                          >
+                            <span>Answer Spoken</span>
+                            <span className="prateek-kbd">⌘↵</span>
+                          </button>
+                        )}
+                      </div>
+                      <p className="live-speech-content">
+                        {interimText.trim()
+                          ? `"${interimText.trim()}"`
+                          : "Listening... speak into your microphone"}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* API KEY SETUP BANNER IF NOT CONFIGURED */}
+                  {!apiKey && (
+                    <div className="prateek-api-alert">
+                      <div className="api-alert-left">
+                        <AlertTriangle size={13} className="icon-amber" />
+                        <span className="api-alert-text">
+                          To transcribe voice to text automatically, add your free Gemini API Key.
+                        </span>
+                      </div>
+                      <button className="btn-api-settings-link" onClick={onOpenSettings}>
+                        <Settings size={12} />
+                        <span>Settings</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Primary Prompt Text Box */}
                   <div className="prateek-question-box">
                     <p className="prateek-question-text">
@@ -483,6 +529,29 @@ export const PrateekOverlay: React.FC<Props> = ({
                         ? activeResponse.prompt
                         : "What happens when I type a URL into the browser?"}
                     </p>
+                  </div>
+
+                  {/* Quick Try Sample Prompts */}
+                  <div className="prateek-quick-test-bar">
+                    <span className="quick-test-hint">Try:</span>
+                    <button
+                      className="btn-quick-sample"
+                      onClick={() => onTriggerAnswer("Design a distributed rate limiter with sliding window")}
+                    >
+                      Rate Limiter
+                    </button>
+                    <button
+                      className="btn-quick-sample"
+                      onClick={() => onTriggerAnswer("How to invert a binary tree in TypeScript?")}
+                    >
+                      Invert Tree
+                    </button>
+                    <button
+                      className="btn-quick-sample"
+                      onClick={() => onTriggerAnswer("Explain the CAP theorem and distributed systems")}
+                    >
+                      CAP Theorem
+                    </button>
                   </div>
 
                   {/* Screen Snapshot Context (if available) */}

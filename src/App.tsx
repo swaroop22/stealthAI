@@ -480,6 +480,7 @@ export default function App() {
           activeSnippet={activeSnippet}
           consent={consent}
           profile={profile}
+          apiKey={apiKey}
           onToggleCapture={handleToggleCapture}
           onCaptureScreenshot={handleCaptureScreenshot}
           onTriggerAnswer={handleTriggerAnswer}
