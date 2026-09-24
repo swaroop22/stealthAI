@@ -13,9 +13,9 @@ let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 740,
-    height: 480,
-    minWidth: 540,
+    width: 860,
+    height: 520,
+    minWidth: 500,
     minHeight: 80,
     title: 'StealthAI',
     frame: false,

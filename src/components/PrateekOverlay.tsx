@@ -15,7 +15,11 @@ import {
   Download,
   Send,
   X,
-  LayoutGrid
+  LayoutGrid,
+  Columns2,
+  MessageSquare,
+  Sparkles,
+  Clock
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
 
@@ -68,21 +72,45 @@ export const PrateekOverlay: React.FC<Props> = ({
   const [chatInput, setChatInput] = useState("");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isCardCollapsed, setIsCardCollapsed] = useState(false);
+  const [cardTab, setCardTab] = useState<"question" | "answer" | "split">("split");
   const [copiedQuestion, setCopiedQuestion] = useState(false);
   const [copiedAnswer, setCopiedAnswer] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
-  // Dynamically shrink or expand Electron window based on card collapse state
+  // Dynamically shrink or expand Electron window based on card collapse and tab state
   useEffect(() => {
     const electron = (window as any).electronAPI;
     if (electron?.resizeWindow) {
       if (isCardCollapsed) {
-        electron.resizeWindow(720, 115);
+        electron.resizeWindow(740, 115);
+      } else if (cardTab === "split") {
+        electron.resizeWindow(860, 520);
       } else {
-        electron.resizeWindow(720, 480);
+        electron.resizeWindow(740, 500);
       }
     }
-  }, [isCardCollapsed]);
+  }, [isCardCollapsed, cardTab]);
+
+  // Keyboard shortcuts for switching tabs
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") {
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "1") {
+        e.preventDefault();
+        setCardTab("question");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "2") {
+        e.preventDefault();
+        setCardTab("answer");
+      } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
+        e.preventDefault();
+        setCardTab("split");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Position index in history
   const currentIndex = activeResponse
@@ -409,27 +437,64 @@ export const PrateekOverlay: React.FC<Props> = ({
         </div>
 
         {/* MAIN FLOATING ANSWER CARD */}
+        {/* MAIN FLOATING QUESTION & ANSWER CARD */}
         {!isCardCollapsed && (
-          <div className="prateek-card no-drag">
-            {/* Card Navigation & Clear Bar */}
+          <div className={`prateek-card no-drag ${cardTab === "split" ? "split-mode" : ""}`}>
+            {/* Card Top Navigation & Left/Right Tabs */}
             <div className="prateek-card-top">
-              <div className="prateek-history-nav">
-                <button
-                  className="prateek-nav-btn"
-                  onClick={handlePrev}
-                  disabled={!canGoPrev}
-                  title="Previous Answer (⌘ + ←)"
-                >
-                  <span className="prateek-kbd">⌘←</span>
-                </button>
-                <button
-                  className="prateek-nav-btn"
-                  onClick={handleNext}
-                  disabled={!canGoNext}
-                  title="Next Answer (⌘ + →)"
-                >
-                  <span className="prateek-kbd">⌘→</span>
-                </button>
+              <div className="prateek-card-top-left">
+                {/* Previous / Next Question Navigation */}
+                <div className="prateek-history-nav">
+                  <button
+                    className="prateek-nav-btn"
+                    onClick={handlePrev}
+                    disabled={!canGoPrev}
+                    title="Previous Question (⌘ + ←)"
+                  >
+                    <span className="prateek-kbd">⌘←</span>
+                  </button>
+                  <button
+                    className="prateek-nav-btn"
+                    onClick={handleNext}
+                    disabled={!canGoNext}
+                    title="Next Question (⌘ + →)"
+                  >
+                    <span className="prateek-kbd">⌘→</span>
+                  </button>
+                </div>
+
+                {/* Left & Right Segmented Tabs */}
+                <div className="prateek-segmented-tabs">
+                  <button
+                    className={`prateek-tab-btn ${cardTab === "question" ? "active" : ""}`}
+                    onClick={() => setCardTab("question")}
+                    title="Question / What I Asked (⌘ + 1)"
+                  >
+                    <MessageSquare size={13} />
+                    <span>Question</span>
+                    <span className="tab-kbd">⌘1</span>
+                  </button>
+
+                  <button
+                    className={`prateek-tab-btn ${cardTab === "answer" ? "active" : ""}`}
+                    onClick={() => setCardTab("answer")}
+                    title="AI Answer & Solution (⌘ + 2)"
+                  >
+                    <Sparkles size={13} />
+                    <span>Answer</span>
+                    <span className="tab-kbd">⌘2</span>
+                  </button>
+
+                  <button
+                    className={`prateek-tab-btn ${cardTab === "split" ? "active" : ""}`}
+                    onClick={() => setCardTab("split")}
+                    title="Split: Question on Left, Answer on Right (⌘ + 3)"
+                  >
+                    <Columns2 size={13} />
+                    <span>Split</span>
+                    <span className="tab-kbd">⌘3</span>
+                  </button>
+                </div>
               </div>
 
               <div className="prateek-card-top-right">
@@ -451,97 +516,177 @@ export const PrateekOverlay: React.FC<Props> = ({
               </div>
             </div>
 
-            {/* Question Line */}
-            <div className="prateek-card-question">
-              <div className="prateek-question-text-group">
-                <span className="question-bubble-icon">💬</span>
-                <span className="question-bold-label">Question:</span>
-                <span className="question-content">
-                  {activeResponse
-                    ? activeResponse.prompt
-                    : "What happens when I type a URL into the browser?"}
-                </span>
-              </div>
-              <button
-                className="prateek-copy-icon-btn"
-                onClick={handleCopyQuestion}
-                title="Copy Question"
-              >
-                {copiedQuestion ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
-              </button>
-            </div>
-
-            {/* Answer Content */}
-            <div className="prateek-card-answer">
-              {/* Star TL;DR Summary */}
-              <div className="prateek-tldr-line">
-                <span className="star-icon">⭐</span>
-                <span className="answer-bold-label">Answer:</span>
-                <span className="answer-tldr-text">{parsed.tldr}</span>
-              </div>
-
-              {/* Bullet Breakdown Points */}
-              <div className="prateek-bullets-list">
-                {parsed.bullets.map((b, idx) => (
-                  <div key={idx} className="prateek-bullet-item">
-                    <span className="bullet-dot">•</span>
-                    {b.prefix && <strong className="bullet-prefix">{b.prefix} </strong>}
-                    <span className="bullet-text">{b.text}</span>
+            {/* CARD BODY: Tabs or Split View */}
+            <div className={`prateek-card-body ${cardTab === "split" ? "split" : "single"}`}>
+              {/* LEFT TAB / COLUMN: WHAT I ASKED */}
+              {(cardTab === "question" || cardTab === "split") && (
+                <div className="prateek-question-panel">
+                  <div className="prateek-panel-subhead">
+                    <div className="subhead-left">
+                      <MessageSquare size={14} className="icon-sky" />
+                      <span className="subhead-title">What I Asked</span>
+                      {activeResponse?.mode && (
+                        <span className="mode-pill">{activeResponse.mode.replace("_", " ")}</span>
+                      )}
+                    </div>
+                    <div className="subhead-right">
+                      <span className="subhead-timestamp">
+                        {activeResponse?.timestamp || "Just now"}
+                      </span>
+                      <button
+                        className="prateek-copy-icon-btn"
+                        onClick={handleCopyQuestion}
+                        title="Copy Question"
+                      >
+                        {copiedQuestion ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Streaming Indicator */}
-              {activeResponse?.isStreaming && (
-                <div className="prateek-streaming-badge">
-                  <span className="pulse-dot" />
-                  <span>Synthesizing response...</span>
+                  {/* Primary Prompt Text Box */}
+                  <div className="prateek-question-box">
+                    <p className="prateek-question-text">
+                      {activeResponse
+                        ? activeResponse.prompt
+                        : "What happens when I type a URL into the browser?"}
+                    </p>
+                  </div>
+
+                  {/* Screen Snapshot Context (if available) */}
+                  {activeSnippet && (
+                    <div className="prateek-snippet-box">
+                      <div className="snippet-box-header">
+                        <Monitor size={12} className="icon-sky" />
+                        <span>Captured Screen Context</span>
+                      </div>
+                      <img
+                        src={activeSnippet.dataUrl}
+                        alt="Screen capture"
+                        className="snippet-preview-img"
+                      />
+                    </div>
+                  )}
+
+                  {/* Session Questions History */}
+                  {responseHistory.length > 0 && (
+                    <div className="prateek-history-questions-box">
+                      <div className="history-header-row">
+                        <Clock size={12} />
+                        <span>All Questions Asked ({responseHistory.length})</span>
+                      </div>
+                      <div className="history-questions-scroll">
+                        {responseHistory.map((item, idx) => {
+                          const isSelected = activeResponse?.id === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              className={`history-q-item ${isSelected ? "selected" : ""}`}
+                              onClick={() => onSelectResponse(item.id)}
+                              title={item.prompt}
+                            >
+                              <span className="q-badge">#{responseHistory.length - idx}</span>
+                              <span className="q-text">{item.prompt}</span>
+                              <span className="q-time">{item.timestamp}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
 
-            {/* Footer Row: Timestamp & Feedback */}
-            <div className="prateek-card-footer">
-              <div className="footer-left">
-                <span className="footer-meta">
-                  Answer · {activeResponse?.timestamp || new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date())}
-                </span>
-                {profile.targetRole && (
-                  <span className="footer-profile-pill">
-                    {profile.targetRole}
-                  </span>
-                )}
-              </div>
+              {/* RIGHT TAB / COLUMN: AI ANSWER & SOLUTION */}
+              {(cardTab === "answer" || cardTab === "split") && (
+                <div className="prateek-answer-panel">
+                  <div className="prateek-panel-subhead">
+                    <div className="subhead-left">
+                      <Sparkles size={14} className="icon-amber" />
+                      <span className="subhead-title">AI Solution</span>
+                      {activeResponse?.isStreaming && (
+                        <span className="generating-pulse">Generating...</span>
+                      )}
+                    </div>
+                    <div className="subhead-right">
+                      {profile.targetRole && (
+                        <span className="footer-profile-pill">{profile.targetRole}</span>
+                      )}
+                      <button
+                        className="prateek-copy-icon-btn"
+                        onClick={handleCopyAnswer}
+                        title="Copy Solution"
+                      >
+                        {copiedAnswer ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
 
-              <div className="footer-actions">
-                <button
-                  className={`prateek-feedback-btn ${feedback === "up" ? "active" : ""}`}
-                  onClick={() => {
-                    setFeedback("up");
-                    showToast("Helpful answer", "success");
-                  }}
-                  title="Helpful"
-                >
-                  <ThumbsUp size={14} />
-                </button>
-                <button
-                  className={`prateek-feedback-btn ${feedback === "down" ? "active" : ""}`}
-                  onClick={() => {
-                    setFeedback("down");
-                    showToast("Feedback recorded", "info");
-                  }}
-                  title="Needs Improvement"
-                >
-                  <ThumbsDown size={14} />
-                </button>
-                <button
-                  className="prateek-feedback-btn"
-                  onClick={handleCopyAnswer}
-                  title="Copy Solution"
-                >
-                  {copiedAnswer ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                </button>
-              </div>
+                  {/* Star TL;DR Summary */}
+                  <div className="prateek-tldr-line">
+                    <span className="star-icon">⭐</span>
+                    <span className="answer-bold-label">Answer:</span>
+                    <span className="answer-tldr-text">{parsed.tldr}</span>
+                  </div>
+
+                  {/* Bullet Breakdown Points */}
+                  <div className="prateek-bullets-list">
+                    {parsed.bullets.map((b, idx) => (
+                      <div key={idx} className="prateek-bullet-item">
+                        <span className="bullet-dot">•</span>
+                        {b.prefix && <strong className="bullet-prefix">{b.prefix} </strong>}
+                        <span className="bullet-text">{b.text}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Streaming Indicator */}
+                  {activeResponse?.isStreaming && (
+                    <div className="prateek-streaming-badge">
+                      <span className="pulse-dot" />
+                      <span>Synthesizing response...</span>
+                    </div>
+                  )}
+
+                  {/* Footer Row: Timestamp & Feedback */}
+                  <div className="prateek-card-footer">
+                    <div className="footer-left">
+                      <span className="footer-meta">
+                        Answer · {activeResponse?.timestamp || new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date())}
+                      </span>
+                    </div>
+
+                    <div className="footer-actions">
+                      <button
+                        className={`prateek-feedback-btn ${feedback === "up" ? "active" : ""}`}
+                        onClick={() => {
+                          setFeedback("up");
+                          showToast("Helpful answer", "success");
+                        }}
+                        title="Helpful"
+                      >
+                        <ThumbsUp size={14} />
+                      </button>
+                      <button
+                        className={`prateek-feedback-btn ${feedback === "down" ? "active" : ""}`}
+                        onClick={() => {
+                          setFeedback("down");
+                          showToast("Feedback recorded", "info");
+                        }}
+                        title="Needs Improvement"
+                      >
+                        <ThumbsDown size={14} />
+                      </button>
+                      <button
+                        className="prateek-feedback-btn"
+                        onClick={handleCopyAnswer}
+                        title="Copy Solution"
+                      >
+                        {copiedAnswer ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
