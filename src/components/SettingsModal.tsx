@@ -142,15 +142,47 @@ export const SettingsModal: React.FC<Props> = ({
             </p>
 
             <div className="form-group full-width">
-              <label>Google Gemini API Key (Optional)</label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <label style={{ margin: 0 }}>Google Gemini API Key (Required for Live Voice-to-Text)</label>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontSize: "11px", color: "#38bdf8", textDecoration: "none", fontWeight: 500 }}
+                >
+                  Get Free Key (Google AI Studio) ↗
+                </a>
+              </div>
               <input
-                type="password"
-                placeholder="AIzaSy..."
+                type="text"
+                placeholder="AIzaSy... or AQ...."
                 value={localApiKey}
-                onChange={(e) => setLocalApiKey(e.target.value)}
+                onChange={(e) => setLocalApiKey(e.target.value.trim())}
+                style={{
+                  borderColor:
+                    localApiKey && localApiKey.length < 20
+                      ? "#f59e0b"
+                      : localApiKey && localApiKey.length >= 20
+                      ? "#10b981"
+                      : undefined
+                }}
               />
-              <span className="field-hint">
-                Leaves machine only for direct Google Gemini streaming calls. Stored in memory / local state.
+              {localApiKey && localApiKey.length < 20 && (
+                <div style={{ marginTop: "6px", fontSize: "11.5px", color: "#f59e0b", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>⚠️</span>
+                  <span>
+                    API key is too short ({localApiKey.length} chars). Gemini keys are typically 39+ characters.
+                  </span>
+                </div>
+              )}
+              {localApiKey && localApiKey.length >= 20 && (
+                <div style={{ marginTop: "6px", fontSize: "11.5px", color: "#10b981", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>✓</span>
+                  <span>Active Gemini API key detected ({localApiKey.slice(0, 4)}...).</span>
+                </div>
+              )}
+              <span className="field-hint" style={{ marginTop: "4px", display: "block" }}>
+                Enables automated Speech-to-Text and live reasoning in macOS desktop app. Stored locally.
               </span>
             </div>
           </div>

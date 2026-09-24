@@ -245,8 +245,8 @@ export class SpeechService {
 
       const level = this.getAudioLevel();
 
-      // Threshold: speech detected
-      if (level > 0.07) {
+      // Threshold: speech detected (responsive threshold)
+      if (level > 0.05) {
         this.silenceCounter = 0;
         this.speechDurationCounter++;
 
@@ -260,8 +260,8 @@ export class SpeechService {
       } else if (this.isRecordingAudio) {
         this.silenceCounter++;
 
-        // After ~1.2 seconds of silence (12 ticks * 100ms) after speech
-        if (this.silenceCounter >= 12) {
+        // After ~1.0 second of silence (10 ticks * 100ms) after speech
+        if (this.silenceCounter >= 10) {
           const durationTicks = this.speechDurationCounter;
           this.stopAudioChunk(durationTicks);
         }
@@ -311,10 +311,11 @@ export class SpeechService {
       const audioBlob = new Blob(this.recordedChunks, { type: mimeType });
       this.recordedChunks = [];
 
-      // Only process if speech was sustained (> 0.6 seconds)
-      if (durationTicks >= 6 && audioBlob.size > 2048) {
+      // Process if speech was sustained (> 0.4 seconds)
+      if (durationTicks >= 4 && audioBlob.size > 1024) {
         if (this.webSpeechDisabled) {
-          if (this.apiKey && this.apiKey.startsWith("AIza")) {
+          const hasApiKey = Boolean(this.apiKey && this.apiKey.trim().length > 15);
+          if (hasApiKey) {
             if (this.storedOnInterim) {
               this.storedOnInterim("⚡ Transcribing audio with Gemini AI...");
             }
@@ -338,19 +339,11 @@ export class SpeechService {
               if (this.storedOnInterim) this.storedOnInterim("");
             }
           } else {
-            if (this.storedOnInterim) this.storedOnInterim("");
-            if (this.storedOnFinal && durationTicks >= 12) {
-              const durationSec = (durationTicks * 0.1).toFixed(1);
-              this.storedOnFinal({
-                id: crypto.randomUUID(),
-                timestamp: new Intl.DateTimeFormat("en-US", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                }).format(new Date()),
-                speaker: this.activeSpeaker,
-                text: `[Audio Spoken (${durationSec}s) — Add Gemini API Key in Settings for live cloud transcription]`,
-              });
+            if (this.storedOnInterim) {
+              this.storedOnInterim("⚠️ Speech heard! Add your free Gemini API Key in Settings to transcribe.");
+              setTimeout(() => {
+                if (this.storedOnInterim) this.storedOnInterim("");
+              }, 4000);
             }
           }
         }

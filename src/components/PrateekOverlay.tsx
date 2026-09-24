@@ -487,7 +487,7 @@ export const PrateekOverlay: React.FC<Props> = ({
                           <span className="live-pulse-dot" />
                           <span className="live-mic-title">{activeSpeaker} Speaking (Live Stream)</span>
                         </div>
-                        {interimText.trim() && (
+                        {interimText.trim() && !interimText.startsWith("🎤") && !interimText.startsWith("⚡") && !interimText.startsWith("⚠️") && (
                           <button
                             className="btn-live-answer-action"
                             onClick={() => onTriggerAnswer(interimText.trim())}
@@ -500,14 +500,16 @@ export const PrateekOverlay: React.FC<Props> = ({
                       </div>
                       <p className="live-speech-content">
                         {interimText.trim()
-                          ? `"${interimText.trim()}"`
+                          ? interimText.startsWith("🎤") || interimText.startsWith("⚡") || interimText.startsWith("⚠️")
+                            ? interimText.trim()
+                            : `"${interimText.trim()}"`
                           : "Listening... speak into your microphone"}
                       </p>
                     </div>
                   )}
 
                   {/* API KEY SETUP BANNER IF NOT CONFIGURED */}
-                  {!apiKey && (
+                  {(!apiKey || apiKey.trim().length < 15) && (
                     <div className="prateek-api-alert">
                       <div className="api-alert-left">
                         <AlertTriangle size={13} className="icon-amber" />

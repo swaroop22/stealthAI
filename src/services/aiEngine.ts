@@ -16,6 +16,12 @@ export class AIEngine {
     }
   }
 
+  private static readonly FLASH_MODELS = [
+    "gemini-3.6-flash",
+    "gemini-3-flash-preview",
+    "gemini-flash-latest"
+  ];
+
   public static async generateStreamingResponse(
     prompt: string,
     mode: AssistantMode,
@@ -28,7 +34,7 @@ export class AIEngine {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    if (apiKey && apiKey.trim().length > 15 && apiKey.startsWith("AIza")) {
+    if (apiKey && apiKey.trim().length > 15) {
       try {
         await this.streamGeminiAPI(prompt, mode, profile, snippet, apiKey.trim(), callbacks, signal);
         return;
@@ -42,7 +48,7 @@ export class AIEngine {
   }
 
   public static async transcribeAudio(blob: Blob, apiKey: string): Promise<string> {
-    if (!apiKey || !apiKey.startsWith("AIza")) {
+    if (!apiKey || apiKey.trim().length < 15) {
       return "";
     }
     const base64Data = await new Promise<string>((resolve, reject) => {
@@ -57,42 +63,54 @@ export class AIEngine {
     });
 
     const rawMime = blob.type || "audio/webm";
-    const mimeType = rawMime.split(";")[0];
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey.trim();
+    const mimeType = rawMime.split(";")[0] || "audio/webm";
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
+    for (const model of this.FLASH_MODELS) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
               {
-                inlineData: {
-                  mimeType,
-                  data: base64Data
-                }
-              },
-              {
-                text: "Transcribe the spoken words in this audio snippet accurately. Output ONLY the raw transcribed words with normal punctuation. Do not add quotes, commentary, or Markdown formatting. If no speech is present, return nothing."
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType,
+                      data: base64Data
+                    }
+                  },
+                  {
+                    text: "Transcribe the spoken words in this audio snippet accurately. Output ONLY the raw transcribed words with normal punctuation. Do not add quotes, commentary, or Markdown formatting. If no speech is present, return nothing."
+                  }
+                ]
               }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 256
-        }
-      })
-    });
+            ],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 256
+            }
+          })
+        });
 
-    if (!response.ok) {
-      throw new Error(`Speech Transcription HTTP ${response.status}`);
+        if (!response.ok) {
+          console.warn(`Model ${model} transcription HTTP error ${response.status}, trying fallback if available...`);
+          continue;
+        }
+
+        const data = await response.json();
+        const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!candidateText) return "";
+        const clean = candidateText.trim();
+        if (clean.toLowerCase() === "none" || clean.toLowerCase() === "none.") return "";
+        return clean;
+      } catch (err) {
+        console.warn(`Model ${model} transcription request failed:`, err);
+      }
     }
 
-    const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return candidateText ? candidateText.trim() : "";
+    return "";
   }
 
   private static async streamGeminiAPI(
@@ -122,58 +140,70 @@ export class AIEngine {
 
     contents.push({ role: "user", parts: userParts });
 
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=" + apiKey;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemInstructions }] },
-        contents,
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 2048
-        }
-      }),
-      signal
-    });
-
-    if (!response.ok) {
-      throw new Error("Gemini API HTTP " + response.status);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error("No readable stream received.");
-
-    const decoder = new TextDecoder();
-    let accumulated = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n");
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const jsonStr = line.slice(6);
-            if (jsonStr.trim() === "[DONE]") continue;
-            const parsed = JSON.parse(jsonStr);
-            const candidate = parsed.candidates?.[0];
-            const textChunk = candidate?.content?.parts?.[0]?.text;
-            if (textChunk) {
-              accumulated += textChunk;
-              callbacks.onToken(textChunk, accumulated);
+    let lastError: Error | null = null;
+    for (const model of this.FLASH_MODELS) {
+      if (signal.aborted) return;
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstructions }] },
+            contents,
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 2048
             }
-          } catch (e) {
-            // Partial chunk
+          }),
+          signal
+        });
+
+        if (!response.ok) {
+          lastError = new Error(`Gemini API ${model} HTTP ${response.status}`);
+          continue;
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No readable stream received.");
+
+        const decoder = new TextDecoder();
+        let accumulated = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              try {
+                const jsonStr = line.slice(6);
+                if (jsonStr.trim() === "[DONE]") continue;
+                const parsed = JSON.parse(jsonStr);
+                const candidate = parsed.candidates?.[0];
+                const textChunk = candidate?.content?.parts?.[0]?.text;
+                if (textChunk) {
+                  accumulated += textChunk;
+                  callbacks.onToken(textChunk, accumulated);
+                }
+              } catch (e) {
+                // Partial chunk
+              }
+            }
           }
         }
+
+        callbacks.onComplete(accumulated);
+        return;
+      } catch (err: any) {
+        if (signal.aborted) return;
+        lastError = err;
       }
     }
 
-    callbacks.onComplete(accumulated);
+    if (lastError) throw lastError;
   }
 
   private static async streamLocalEngine(
