@@ -13,12 +13,17 @@ let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1300,
-    height: 840,
-    minWidth: 960,
-    minHeight: 640,
+    width: 740,
+    height: 480,
+    minWidth: 540,
+    minHeight: 80,
     title: 'StealthAI',
-    backgroundColor: '#070a12',
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    alwaysOnTop: true,
+    resizable: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -28,6 +33,12 @@ function createWindow() {
       spellcheck: false,
     },
   });
+
+  // Keep window floating on top of all windows & full-screen apps
+  mainWindow.setAlwaysOnTop(true, 'floating', 1);
+  if (mainWindow.setVisibleOnAllWorkspaces) {
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
 
   // Display capture handler for navigator.mediaDevices.getDisplayMedia
   if (session.defaultSession.setDisplayMediaRequestHandler) {
@@ -79,8 +90,6 @@ function createWindow() {
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
-    // Open DevTools in dev mode
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -89,6 +98,21 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// IPC handlers for window control
+ipcMain.on('close-window', () => {
+  if (mainWindow) mainWindow.close();
+});
+
+ipcMain.on('minimize-window', () => {
+  if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('resize-window', (e, { width, height }) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setSize(width, height);
+  }
+});
 
 // IPC handler to list screen/window sources if needed by renderer
 ipcMain.handle('get-screen-sources', async () => {

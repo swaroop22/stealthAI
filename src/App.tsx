@@ -96,6 +96,18 @@ export default function App() {
     autoAnswerRef.current = autoAnswer;
   }, [autoAnswer]);
 
+  // Resize Electron window dynamically on viewMode change
+  useEffect(() => {
+    const electron = (window as any).electronAPI;
+    if (electron?.resizeWindow) {
+      if (viewMode === "dashboard") {
+        electron.resizeWindow(1200, 800);
+      } else {
+        electron.resizeWindow(720, 520);
+      }
+    }
+  }, [viewMode]);
+
   const showToast = (text: string, type: "info" | "success" | "error" = "info") => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 3500);
@@ -253,8 +265,11 @@ export default function App() {
           setInterimText("");
 
           // AUTO-ANSWER WITH CONTINUOUS BUFFERING:
-          if (autoAnswerRef.current && finalItem.text.trim().length > 2) {
-            speechAccumulatorRef.current = (speechAccumulatorRef.current + " " + finalItem.text).trim();
+          const trimmedItem = finalItem.text.trim();
+          const isSystemNotice = trimmedItem.startsWith("[") && trimmedItem.endsWith("]");
+
+          if (autoAnswerRef.current && trimmedItem.length > 2 && !isSystemNotice) {
+            speechAccumulatorRef.current = (speechAccumulatorRef.current + " " + trimmedItem).trim();
 
             if (autoAnswerTimerRef.current) {
               clearTimeout(autoAnswerTimerRef.current);
@@ -262,7 +277,7 @@ export default function App() {
 
             autoAnswerTimerRef.current = setTimeout(() => {
               const fullQuestion = speechAccumulatorRef.current.trim();
-              if (fullQuestion.length > 3) {
+              if (fullQuestion.length > 3 && !fullQuestion.startsWith("[")) {
                 showToast(`Answering question: "${fullQuestion.slice(0, 32)}..."`, "info");
                 triggerGenRef.current(fullQuestion);
               }
@@ -303,8 +318,9 @@ export default function App() {
       triggerGeneration(promptOverride.trim());
       return;
     }
-    const latestSpoken = speechAccumulatorRef.current.trim() || (transcript.length > 0 ? transcript[transcript.length - 1].text : "");
-    if (latestSpoken) {
+    const validTranscripts = transcript.filter((t) => !t.text.trim().startsWith("["));
+    const latestSpoken = speechAccumulatorRef.current.trim() || (validTranscripts.length > 0 ? validTranscripts[validTranscripts.length - 1].text : "");
+    if (latestSpoken && !latestSpoken.startsWith("[")) {
       triggerGeneration(latestSpoken);
     } else if (activeSnippet) {
       triggerGeneration("Analyze the problem from the screen snapshot.", "coding");

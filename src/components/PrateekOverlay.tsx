@@ -1,30 +1,23 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Monitor,
   Mic,
-  MicOff,
   Move,
   Minimize2,
   Maximize2,
   MoreVertical,
-  MessageSquare,
   Copy,
   Check,
-  Sparkles,
   ThumbsUp,
   ThumbsDown,
-  Trash2,
   Settings,
   FileText,
   Download,
   Send,
   X,
-  ChevronLeft,
-  ChevronRight,
   LayoutGrid
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
-import { PRESET_SCENARIOS } from "../services/presetScenarios";
 
 interface Props {
   isCapturing: boolean;
@@ -79,6 +72,18 @@ export const PrateekOverlay: React.FC<Props> = ({
   const [copiedAnswer, setCopiedAnswer] = useState(false);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
 
+  // Dynamically shrink or expand Electron window based on card collapse state
+  useEffect(() => {
+    const electron = (window as any).electronAPI;
+    if (electron?.resizeWindow) {
+      if (isCardCollapsed) {
+        electron.resizeWindow(720, 115);
+      } else {
+        electron.resizeWindow(720, 480);
+      }
+    }
+  }, [isCardCollapsed]);
+
   // Position index in history
   const currentIndex = activeResponse
     ? responseHistory.findIndex((r) => r.id === activeResponse.id)
@@ -124,12 +129,26 @@ export const PrateekOverlay: React.FC<Props> = ({
     setIsChatOpen(false);
   };
 
+  const handleEndApp = () => {
+    const electron = (window as any).electronAPI;
+    if (electron?.closeWindow) {
+      electron.closeWindow();
+    } else {
+      if (isCapturing) onToggleCapture();
+      showToast("Session ended", "info");
+    }
+  };
+
   // Format speech stream chunks as discrete pills like the screenshot
   const displaySpeechPills = (): string[] => {
     const rawText = interimText.trim() || (transcript.length > 0 ? transcript[transcript.length - 1].text : "");
     if (!rawText) return ["What happens when", "I type a", "URL into the", "browser?"];
 
-    // Split into chunks of 3-4 words per pill
+    // Filter out internal system logs
+    if (rawText.startsWith("[") && rawText.endsWith("]")) {
+      return ["Listening...", "(speech", "detected)"];
+    }
+
     const words = rawText.split(/\s+/);
     const pills: string[] = [];
     let currentChunk: string[] = [];
@@ -144,7 +163,7 @@ export const PrateekOverlay: React.FC<Props> = ({
     if (currentChunk.length > 0) {
       pills.push(currentChunk.join(" "));
     }
-    return pills.slice(-5);
+    return pills.slice(-4);
   };
 
   // Parse structured answer: TL;DR and bullets
@@ -152,7 +171,7 @@ export const PrateekOverlay: React.FC<Props> = ({
     if (!content) return { tldr: "DNS, connection, request, render.", bullets: [
       { prefix: "Resolve:", text: "the host goes through the cache chain, then the recursive resolver." },
       { prefix: "Connect:", text: "TCP handshake, then TLS — ALPN negotiates HTTP/2 here." },
-      { prefix: "Render:", text: "the server responds; the browser parses HTML, builds the DOM, and executes JS." }
+      { prefix: "Render:", text: "the server responds; the browser parses HTML, builds the DO" }
     ]};
 
     let tldr = "";
@@ -164,7 +183,6 @@ export const PrateekOverlay: React.FC<Props> = ({
         tldr = line.replace(/^[⭐\s*]*(answer:)?/i, "").replace(/^\*+/g, "").replace(/\*+$/g, "").trim();
       } else if (line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) {
         const clean = line.replace(/^[•\-*]\s*/, "");
-        // Match prefix e.g. **Resolve:**
         const match = clean.match(/^\*\*([^*]+)\*\*:?\s*(.*)$/);
         if (match) {
           bullets.push({ prefix: match[1].replace(/:$/, "") + ":", text: match[2] });
@@ -191,58 +209,18 @@ export const PrateekOverlay: React.FC<Props> = ({
         bullets: [
           { prefix: "Resolve:", text: "the host goes through the cache chain, then the recursive resolver." },
           { prefix: "Connect:", text: "TCP handshake, then TLS — ALPN negotiates HTTP/2 here." },
-          { prefix: "Render:", text: "the server responds; the browser parses HTML, builds the DOM tree." }
+          { prefix: "Render:", text: "the server responds; the browser parses HTML, builds the DO" }
         ]
       };
 
   return (
     <div className="prateek-overlay-wrapper">
-      {/* Background Dimmed Workstation View (Matches screenshot depth) */}
-      <div className="prateek-bg-workspace">
-        <div className="prateek-bg-header">
-          <div className="prateek-bg-title">
-            <h2>Prepare for calls and review past sessions.</h2>
-            <div className="prateek-bg-tabs">
-              <span className="tab active">All</span>
-              <span className="tab">Active</span>
-              <span className="tab">Ended</span>
-            </div>
-          </div>
-          <button className="prateek-dashboard-toggle-btn" onClick={onSwitchToDashboard} title="Open Full Studio Dashboard">
-            <LayoutGrid size={15} />
-            <span>Studio View</span>
-          </button>
-        </div>
-
-        {/* Sample sessions row in background */}
-        <div className="prateek-bg-table">
-          <div className="prateek-bg-row">
-            <span className="name">Google • System Design</span>
-            <span className="type">Interview</span>
-            <span className="time">31 mins 45 secs</span>
-            <span className="status live">● Live Active</span>
-          </div>
-          <div className="prateek-bg-row">
-            <span className="name">Meta • Full Stack Senior</span>
-            <span className="type">Interview</span>
-            <span className="time">45 mins 0 secs</span>
-            <span className="status ended">Completed</span>
-          </div>
-          <div className="prateek-bg-row">
-            <span className="name">Apple • Performance & Systems</span>
-            <span className="type">Technical</span>
-            <span className="time">52 mins 10 secs</span>
-            <span className="status ended">Completed</span>
-          </div>
-        </div>
-      </div>
-
-      {/* FLOATING HUD & ANSWER CARD OVERLAY CONTAINER */}
+      {/* FLOATING HUD & ANSWER CARD OVERLAY CONTAINER (100% Transparent Desktop Background) */}
       <div className="prateek-floating-hud-container">
-        {/* TOP HUD BAR */}
+        {/* TOP HUD BAR (Draggable region) */}
         <div className="prateek-hud-top">
           {/* Left Indicator Buttons: Screen and Mic */}
-          <div className="prateek-indicators-group">
+          <div className="prateek-indicators-group no-drag">
             <button
               className={`prateek-status-icon-btn ${activeSnippet ? "recording" : ""}`}
               onClick={onCaptureScreenshot}
@@ -263,11 +241,11 @@ export const PrateekOverlay: React.FC<Props> = ({
           </div>
 
           {/* Action Pills */}
-          <div className="prateek-actions-group">
+          <div className="prateek-actions-group no-drag">
             <button
               className="prateek-pill-btn prateek-pill-answer"
               onClick={() => onTriggerAnswer()}
-              title="Answer current spoken question or screen (⌘ + Enter)"
+              title="Answer current question (⌘ + Enter)"
             >
               <span className="pill-text">Answer</span>
               <span className="prateek-kbd">⌘↵</span>
@@ -276,7 +254,7 @@ export const PrateekOverlay: React.FC<Props> = ({
             <button
               className="prateek-pill-btn"
               onClick={onCaptureScreenshot}
-              title="Take screenshot and solve (⌘ + Shift + Enter)"
+              title="Take screenshot & solve (⌘ + Shift + Enter)"
             >
               <span className="pill-text">Screenshot</span>
               <span className="prateek-kbd">⌘⇧↵</span>
@@ -285,23 +263,23 @@ export const PrateekOverlay: React.FC<Props> = ({
             <button
               className={`prateek-pill-btn prateek-pill-dashed ${isChatOpen ? "active" : ""}`}
               onClick={() => setIsChatOpen(!isChatOpen)}
-              title="Toggle Custom Prompt / Chat (⌘ + Shift + Backspace)"
+              title="Toggle Custom Prompt (⌘ + Shift + Backspace)"
             >
               <span className="pill-text">Chat</span>
               <span className="prateek-kbd">⌘⇧⌫</span>
             </button>
           </div>
 
-          {/* Right Utility Icons */}
-          <div className="prateek-controls-group">
-            <button className="prateek-tool-icon-btn" title="Drag / Move HUD">
+          {/* Right Controls */}
+          <div className="prateek-controls-group no-drag">
+            <button className="prateek-tool-icon-btn drag-handle" title="Click & Drag to move HUD">
               <Move size={15} />
             </button>
 
             <button
               className="prateek-tool-icon-btn"
               onClick={() => setIsCardCollapsed(!isCardCollapsed)}
-              title={isCardCollapsed ? "Expand Answer Card" : "Collapse to Pill Bar"}
+              title={isCardCollapsed ? "Expand Answer Card" : "Collapse to Bar"}
             >
               {isCardCollapsed ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
             </button>
@@ -310,7 +288,7 @@ export const PrateekOverlay: React.FC<Props> = ({
               <button
                 className="prateek-tool-icon-btn"
                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                title="More Options"
+                title="Options"
               >
                 <MoreVertical size={16} />
               </button>
@@ -351,7 +329,7 @@ export const PrateekOverlay: React.FC<Props> = ({
                     }}
                   >
                     <LayoutGrid size={15} />
-                    <span>Full Dashboard Mode</span>
+                    <span>Full Dashboard View</span>
                   </button>
                 </div>
               )}
@@ -359,11 +337,8 @@ export const PrateekOverlay: React.FC<Props> = ({
 
             <button
               className="prateek-end-btn"
-              onClick={() => {
-                if (isCapturing) onToggleCapture();
-                showToast("Session ended", "info");
-              }}
-              title="End active session"
+              onClick={handleEndApp}
+              title="Close Application"
             >
               End
             </button>
@@ -372,11 +347,11 @@ export const PrateekOverlay: React.FC<Props> = ({
 
         {/* INLINE QUICK CHAT DRAWER */}
         {isChatOpen && (
-          <form className="prateek-chat-drawer" onSubmit={handleChatSubmit}>
+          <form className="prateek-chat-drawer no-drag" onSubmit={handleChatSubmit}>
             <input
               type="text"
               className="prateek-chat-input"
-              placeholder="Ask anything or paste question (e.g. What happens when I type a URL into the browser?)..."
+              placeholder="Ask anything (e.g. What happens when I type a URL into the browser?)..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               autoFocus
@@ -397,14 +372,14 @@ export const PrateekOverlay: React.FC<Props> = ({
         {/* FLOATING LIVE SPEECH STREAM PILL BAR */}
         <div className="prateek-hud-speech">
           {/* Animated Green Waveform Audio Bars */}
-          <div className="prateek-audio-bars" title={isCapturing ? "Live Audio Capturing" : "Audio Muted"}>
+          <div className="prateek-audio-bars no-drag" title={isCapturing ? "Live Audio Capturing" : "Audio Muted"}>
             <span className={`bar bar-1 ${isCapturing ? "bouncing" : ""}`} />
             <span className={`bar bar-2 ${isCapturing ? "bouncing" : ""}`} />
             <span className={`bar bar-3 ${isCapturing ? "bouncing" : ""}`} />
           </div>
 
           {/* Speech Chunks as Rounded Pills */}
-          <div className="prateek-speech-tokens-container">
+          <div className="prateek-speech-tokens-container no-drag">
             {displaySpeechPills().map((pill, idx) => (
               <span key={idx} className="prateek-token-pill">
                 {pill}
@@ -413,7 +388,7 @@ export const PrateekOverlay: React.FC<Props> = ({
           </div>
 
           {/* Right Action: Clear and Expand */}
-          <div className="prateek-speech-actions">
+          <div className="prateek-speech-actions no-drag">
             <button
               className="prateek-pill-btn prateek-pill-sm"
               onClick={onClearTranscript}
@@ -435,7 +410,7 @@ export const PrateekOverlay: React.FC<Props> = ({
 
         {/* MAIN FLOATING ANSWER CARD */}
         {!isCardCollapsed && (
-          <div className="prateek-card">
+          <div className="prateek-card no-drag">
             {/* Card Navigation & Clear Bar */}
             <div className="prateek-card-top">
               <div className="prateek-history-nav">
@@ -531,9 +506,9 @@ export const PrateekOverlay: React.FC<Props> = ({
                 <span className="footer-meta">
                   Answer · {activeResponse?.timestamp || new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date())}
                 </span>
-                {profile.name && (
+                {profile.targetRole && (
                   <span className="footer-profile-pill">
-                    {profile.targetRole || "Senior Engineer"}
+                    {profile.targetRole}
                   </span>
                 )}
               </div>

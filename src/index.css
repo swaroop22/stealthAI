@@ -33,24 +33,38 @@
   padding: 0;
 }
 
-body {
+html, body {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+#root {
+  background: transparent !important;
+  background-color: transparent !important;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* App Layout for Dashboard Studio View */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100%;
   background-color: var(--bg-main);
   background-image: 
     radial-gradient(circle at 10% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
     radial-gradient(circle at 85% 25%, rgba(129, 140, 248, 0.08) 0%, transparent 45%),
     linear-gradient(180deg, #070a12 0%, #0c1222 100%);
-  color: var(--text-main);
-  font-family: var(--font-sans);
-  min-height: 100vh;
-  -webkit-font-smoothing: antialiased;
-  line-height: 1.5;
-}
-
-/* App Layout */
-.app-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+  overflow-y: auto;
 }
 
 /* Header */
@@ -2057,59 +2071,24 @@ pre {
 
 .prateek-overlay-wrapper {
   position: relative;
-  min-height: 100vh;
   width: 100%;
-  background: #0f1115;
+  height: 100vh;
+  background: transparent !important;
+  background-color: transparent !important;
   color: #f1f5f9;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
-  overflow-x: hidden;
+  overflow: hidden;
   user-select: none;
-}
-
-/* Background Dimmed Workstation */
-.prateek-bg-workspace {
-  position: absolute;
-  inset: 0;
-  padding: 2.5rem 3.5rem;
-  opacity: 0.16;
-  filter: blur(1.5px);
-  pointer-events: none;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-}
-
-.prateek-bg-header {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 1.5rem;
+  padding: 6px 12px 12px 12px;
+  box-sizing: border-box;
 }
 
-.prateek-bg-title h2 {
-  font-size: 1.4rem;
-  font-weight: 500;
-  color: #94a3b8;
-  margin-bottom: 0.75rem;
-}
-
-.prateek-bg-tabs {
-  display: flex;
-  gap: 1.5rem;
-}
-
-.prateek-bg-tabs .tab {
-  font-size: 0.9rem;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.prateek-bg-tabs .tab.active {
-  color: #f8fafc;
-  font-weight: 600;
-  border-bottom: 2px solid #38bdf8;
-  padding-bottom: 4px;
+/* Hide background dummy workspace completely */
+.prateek-bg-workspace {
+  display: none !important;
 }
 
 .prateek-dashboard-toggle-btn {
@@ -2141,59 +2120,51 @@ pre {
   transform: translateY(-1px);
 }
 
-.prateek-bg-table {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.prateek-bg-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  font-size: 0.88rem;
-  color: #94a3b8;
-}
-
-.prateek-bg-row .name {
-  color: #e2e8f0;
-  font-weight: 500;
-}
-
-.prateek-bg-row .status.live {
-  color: #10b981;
-}
-
-/* FLOATING HUD CONTAINER */
+/* FLOATING HUD CONTAINER (Transparent, floating over desktop) */
 .prateek-floating-hud-container {
   position: relative;
   z-index: 100;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 2.2rem 1rem 3rem 1rem;
+  padding: 0;
   width: 100%;
-  max-width: 740px;
+  max-width: 720px;
   margin: 0 auto;
 }
 
-/* TOP HUD PILL BAR */
+/* TOP HUD PILL BAR (Draggable region) */
 .prateek-hud-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  background: rgba(28, 31, 37, 0.94);
+  background: rgba(28, 31, 37, 0.96);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 9999px;
-  padding: 6px 10px 6px 14px;
-  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  padding: 6px 12px 6px 14px;
+  box-shadow: 0 16px 40px -6px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.06);
   width: auto;
   max-width: 100%;
+  -webkit-app-region: drag;
+}
+
+.no-drag,
+.drag-handle,
+.prateek-indicators-group,
+.prateek-actions-group,
+.prateek-controls-group,
+.prateek-pill-btn,
+.prateek-status-icon-btn,
+.prateek-tool-icon-btn,
+.prateek-end-btn,
+.prateek-hud-speech,
+.prateek-card,
+.prateek-dropdown-menu,
+.prateek-chat-drawer {
+  -webkit-app-region: no-drag;
 }
 
 /* Indicators */
@@ -2561,19 +2532,24 @@ pre {
 
 /* MAIN FLOATING ANSWER CARD */
 .prateek-card {
-  margin-top: 10px;
+  margin-top: 8px;
   width: 100%;
   max-width: 680px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
   background: rgba(27, 30, 36, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 18px;
-  box-shadow: 0 24px 60px -8px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  padding: 16px 20px;
+  box-shadow: 0 24px 60px -8px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   backdrop-filter: blur(32px);
   animation: cardFadeIn 0.2s ease-out;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  -webkit-app-region: no-drag;
 }
 
 /* Card Top Navigation */
