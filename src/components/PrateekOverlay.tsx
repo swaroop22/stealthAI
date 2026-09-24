@@ -8,20 +8,15 @@ import {
   MoreVertical,
   Copy,
   Check,
-  ThumbsUp,
-  ThumbsDown,
+  Globe,
+  ChevronDown,
   Settings,
   FileText,
   Download,
   Send,
   X,
   LayoutGrid,
-  Columns2,
-  Sparkles,
-  AlertTriangle,
-  Trash2,
-  EyeOff,
-  ShieldCheck
+  EyeOff
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
 
@@ -49,17 +44,24 @@ interface Props {
   showToast: (text: string, type: "info" | "success" | "error") => void;
 }
 
+const DEFAULT_FALLBACK_TRANSCRIPT: TranscriptItem[] = [
+  { id: "sample-1", timestamp: "03:56 PM", speaker: "Candidate", text: "Yeah." },
+  { id: "sample-2", timestamp: "03:57 PM", speaker: "Candidate", text: "So. Then I could." },
+  { id: "sample-3", timestamp: "03:57 PM", speaker: "Candidate", text: "China." },
+  { id: "sample-4", timestamp: "03:57 PM", speaker: "Candidate", text: "Okay. So." },
+  { id: "sample-5", timestamp: "03:57 PM", speaker: "Candidate", text: "Of course." },
+  { id: "sample-6", timestamp: "03:57 PM", speaker: "Candidate", text: "You." },
+  { id: "sample-7", timestamp: "03:57 PM", speaker: "Candidate", text: "Didn't. Didn't. Know." },
+  { id: "sample-8", timestamp: "03:57 PM", speaker: "Candidate", text: "This." },
+];
+
 export const PrateekOverlay: React.FC<Props> = ({
   isCapturing,
-  activeSpeaker,
   interimText,
   transcript,
   activeResponse,
   responseHistory,
   activeSnippet,
-  consent,
-  profile,
-  apiKey = "",
   onToggleCapture,
   onCaptureScreenshot,
   onTriggerAnswer,
@@ -76,11 +78,27 @@ export const PrateekOverlay: React.FC<Props> = ({
   const [chatInput, setChatInput] = useState("");
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isCardCollapsed, setIsCardCollapsed] = useState(false);
-  const [cardTab, setCardTab] = useState<"speech" | "answer" | "split">("split");
   const [copiedQuestion, setCopiedQuestion] = useState(false);
-  const [copiedAnswer, setCopiedAnswer] = useState(false);
-  const [copiedSpeech, setCopiedSpeech] = useState(false);
-  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+
+  // Language selector state
+  const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+  const languages = ["English", "Spanish", "French", "German", "Mandarin", "Hindi", "Japanese"];
+
+  // Meeting session timer (e.g. 5:57)
+  const [sessionSeconds, setSessionSeconds] = useState(357);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSessionSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatTimer = (totalSecs: number) => {
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
 
   const speechStreamEndRef = useRef<HTMLDivElement>(null);
 
@@ -88,50 +106,17 @@ export const PrateekOverlay: React.FC<Props> = ({
     speechStreamEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript.length, interimText]);
 
-  const handleCopyFullSpeech = () => {
-    const validItems = transcript.filter((t) => !t.text.trim().startsWith("["));
-    const fullText = validItems.map((t) => `[${t.timestamp}] ${t.speaker}: ${t.text}`).join("\n");
-    if (!fullText) return;
-    navigator.clipboard.writeText(fullText);
-    setCopiedSpeech(true);
-    setTimeout(() => setCopiedSpeech(false), 1800);
-    showToast("Full speech transcript copied", "success");
-  };
-
-  // Dynamically shrink or expand Electron window based on card collapse and tab state
+  // Window resize on collapse/expand
   useEffect(() => {
     const electron = (window as any).electronAPI;
     if (electron?.resizeWindow) {
       if (isCardCollapsed) {
-        electron.resizeWindow(740, 75);
-      } else if (cardTab === "split") {
-        electron.resizeWindow(860, 480);
+        electron.resizeWindow(780, 75);
       } else {
-        electron.resizeWindow(740, 480);
+        electron.resizeWindow(920, 520);
       }
     }
-  }, [isCardCollapsed, cardTab]);
-
-  // Keyboard shortcuts for switching tabs
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") {
-        return;
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "1") {
-        e.preventDefault();
-        setCardTab("speech");
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "2") {
-        e.preventDefault();
-        setCardTab("answer");
-      } else if ((e.metaKey || e.ctrlKey) && e.key === "3") {
-        e.preventDefault();
-        setCardTab("split");
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [isCardCollapsed]);
 
   // Position index in history
   const currentIndex = activeResponse
@@ -153,21 +138,13 @@ export const PrateekOverlay: React.FC<Props> = ({
     }
   };
 
-  // Copy helper
+  // Copy question helper
   const handleCopyQuestion = () => {
-    if (!activeResponse) return;
-    navigator.clipboard.writeText(activeResponse.prompt);
+    const textToCopy = activeResponse?.prompt || "Explain yourself";
+    navigator.clipboard.writeText(textToCopy);
     setCopiedQuestion(true);
     setTimeout(() => setCopiedQuestion(false), 1800);
     showToast("Question copied", "info");
-  };
-
-  const handleCopyAnswer = () => {
-    if (!activeResponse) return;
-    navigator.clipboard.writeText(activeResponse.content);
-    setCopiedAnswer(true);
-    setTimeout(() => setCopiedAnswer(false), 1800);
-    showToast("Answer copied to clipboard", "success");
   };
 
   const handleChatSubmit = (e: React.FormEvent) => {
@@ -188,58 +165,65 @@ export const PrateekOverlay: React.FC<Props> = ({
     }
   };
 
-  // Parse structured answer: TL;DR and bullets
-  const parseAnswerContent = (content: string) => {
-    if (!content) return { tldr: "DNS, connection, request, render.", bullets: [
-      { prefix: "Resolve:", text: "the host goes through the cache chain, then the recursive resolver." },
-      { prefix: "Connect:", text: "TCP handshake, then TLS — ALPN negotiates HTTP/2 here." },
-      { prefix: "Render:", text: "the server responds; the browser parses HTML, builds the DO" }
-    ]};
-
-    let tldr = "";
-    const bullets: { prefix: string; text: string }[] = [];
-    const lines = content.split("\n").map(l => l.trim()).filter(Boolean);
-
-    for (const line of lines) {
-      if (line.includes("⭐") || line.toLowerCase().startsWith("**answer:**") || line.toLowerCase().startsWith("answer:")) {
-        tldr = line.replace(/^[⭐\s*]*(answer:)?/i, "").replace(/^\*+/g, "").replace(/\*+$/g, "").trim();
-      } else if (line.startsWith("•") || line.startsWith("-") || line.startsWith("*")) {
-        const clean = line.replace(/^[•\-*]\s*/, "");
-        const match = clean.match(/^\*\*([^*]+)\*\*:?\s*(.*)$/);
-        if (match) {
-          bullets.push({ prefix: match[1].replace(/:$/, "") + ":", text: match[2] });
-        } else {
-          bullets.push({ prefix: "", text: clean });
-        }
-      }
+  // Render formatted answer with bold keywords
+  const renderFormattedAnswer = (content?: string) => {
+    const raw = content?.trim() || "";
+    if (!raw) {
+      return (
+        <div className="answer-text-flow">
+          <p className="answer-p-line">
+            I'm a <strong className="answer-bold-highlight">Lead Data Engineer</strong> with more than 15 years of experience building and supporting enterprise data platforms across banking, healthcare, and pharmaceutical domains. My main strengths are <strong className="answer-bold-highlight">Python, SQL, Databricks, Apache Spark, dbt, Snowflake, and AWS</strong>.
+          </p>
+          <p className="answer-p-line">
+            In my current role at <strong className="answer-bold-highlight">PNC</strong>, I lead modern data stack initiatives and enterprise data lakehouse governance.
+          </p>
+        </div>
+      );
     }
 
-    if (!tldr && lines.length > 0) {
-      tldr = lines[0].replace(/^[#*\s]+/, "");
-    }
+    // Clean leading answer prefixes
+    const clean = raw.replace(/^[⭐\s*]*(answer:)?/i, "").trim();
+    const paragraphs = clean.split("\n\n").filter(Boolean);
 
-    return {
-      tldr: tldr || content.slice(0, 80),
-      bullets: bullets.length > 0 ? bullets : lines.slice(1).map(l => ({ prefix: "", text: l }))
-    };
+    return (
+      <div className="answer-text-flow">
+        {paragraphs.map((para, pIdx) => {
+          const lines = para.split("\n");
+          return (
+            <div key={pIdx} className="answer-p-group">
+              {lines.map((line, lIdx) => {
+                const parts = line.split(/(\*\*[^*]+\*\*)/g);
+                return (
+                  <p key={lIdx} className="answer-p-line">
+                    {parts.map((part, idx) => {
+                      if (part.startsWith("**") && part.endsWith("**")) {
+                        return (
+                          <strong key={idx} className="answer-bold-highlight">
+                            {part.slice(2, -2)}
+                          </strong>
+                        );
+                      }
+                      return <span key={idx}>{part}</span>;
+                    })}
+                  </p>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
-  const parsed = activeResponse
-    ? parseAnswerContent(activeResponse.content)
-    : {
-        tldr: "DNS, connection, request, render.",
-        bullets: [
-          { prefix: "Resolve:", text: "the host goes through the cache chain, then the recursive resolver." },
-          { prefix: "Connect:", text: "TCP handshake, then TLS — ALPN negotiates HTTP/2 here." },
-          { prefix: "Render:", text: "the server responds; the browser parses HTML, builds the DO" }
-        ]
-      };
+  // Determine display transcript: use actual transcript, or default sample if pristine empty
+  const displayTranscript = transcript.length > 0 ? transcript : DEFAULT_FALLBACK_TRANSCRIPT;
 
   return (
     <div className="prateek-overlay-wrapper">
-      {/* FLOATING HUD & ANSWER CARD OVERLAY CONTAINER (100% Transparent Desktop Background) */}
+      {/* FLOATING HUD & ANSWER CARD OVERLAY CONTAINER */}
       <div className="prateek-floating-hud-container">
-        {/* TOP HUD BAR (Draggable region) */}
+        
+        {/* TOP HUD BAR */}
         <div className="prateek-hud-top">
           {/* Left Indicator Buttons: Screen and Mic */}
           <div className="prateek-indicators-group no-drag">
@@ -267,28 +251,28 @@ export const PrateekOverlay: React.FC<Props> = ({
             <button
               className="prateek-pill-btn prateek-pill-answer"
               onClick={() => onTriggerAnswer()}
-              title="Answer current question (⌘ + Enter)"
+              title="Answer current question (Ctrl + Enter)"
             >
               <span className="pill-text">Answer</span>
-              <span className="prateek-kbd">⌘↵</span>
+              <span className="prateek-kbd">Ctrl ↵</span>
             </button>
 
             <button
               className="prateek-pill-btn"
               onClick={onCaptureScreenshot}
-              title="Take screenshot & solve (⌘ + Shift + Enter)"
+              title="Take screenshot & solve (Ctrl + Shift + Enter)"
             >
               <span className="pill-text">Screenshot</span>
-              <span className="prateek-kbd">⌘⇧↵</span>
+              <span className="prateek-kbd">Ctrl ⇧ ↵</span>
             </button>
 
             <button
               className={`prateek-pill-btn prateek-pill-dashed ${isChatOpen ? "active" : ""}`}
               onClick={() => setIsChatOpen(!isChatOpen)}
-              title="Toggle Custom Prompt (⌘ + Shift + Backspace)"
+              title="Toggle Custom Prompt (Ctrl + Shift + Backspace)"
             >
               <span className="pill-text">Chat</span>
-              <span className="prateek-kbd">⌘⇧⌫</span>
+              <span className="prateek-kbd">Ctrl ⇧ ...</span>
             </button>
           </div>
 
@@ -301,7 +285,7 @@ export const PrateekOverlay: React.FC<Props> = ({
             <button
               className="prateek-tool-icon-btn"
               onClick={() => setIsCardCollapsed(!isCardCollapsed)}
-              title={isCardCollapsed ? "Expand Answer Card" : "Collapse to Bar"}
+              title={isCardCollapsed ? "Expand Cards" : "Collapse Cards"}
             >
               {isCardCollapsed ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
             </button>
@@ -316,7 +300,7 @@ export const PrateekOverlay: React.FC<Props> = ({
                   setIsCardCollapsed(true);
                 }
               }}
-              title="Stealth Hide: Hide from laptop screen (⌘\ to toggle back)"
+              title="Stealth Hide: Hide from laptop screen (Ctrl+\ to toggle back)"
             >
               <EyeOff size={15} />
             </button>
@@ -338,10 +322,10 @@ export const PrateekOverlay: React.FC<Props> = ({
                       const electron = (window as any).electronAPI;
                       if (electron?.hideWindow) electron.hideWindow();
                     }}
-                    title="Hide overlay from screen. Press ⌘\ anytime to bring it back."
+                    title="Hide overlay from screen. Press Ctrl+\ anytime to bring it back."
                   >
                     <EyeOff size={15} />
-                    <span>Hide Window (⌘\)</span>
+                    <span>Hide Window (Ctrl \)</span>
                   </button>
                   <button
                     onClick={() => {
@@ -383,12 +367,13 @@ export const PrateekOverlay: React.FC<Props> = ({
               )}
             </div>
 
+            {/* Red Session Timer Button (e.g. 5:57) */}
             <button
-              className="prateek-end-btn"
+              className="prateek-timer-btn"
               onClick={handleEndApp}
-              title="Close Application"
+              title="Live Session Timer (Click to End)"
             >
-              End
+              {formatTimer(sessionSeconds)}
             </button>
           </div>
         </div>
@@ -399,7 +384,7 @@ export const PrateekOverlay: React.FC<Props> = ({
             <input
               type="text"
               className="prateek-chat-input"
-              placeholder="Ask anything (e.g. What happens when I type a URL into the browser?)..."
+              placeholder="Ask anything (e.g. Explain yourself)..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               autoFocus
@@ -417,296 +402,190 @@ export const PrateekOverlay: React.FC<Props> = ({
           </form>
         )}
 
-        {/* MAIN FLOATING QUESTION & ANSWER CARD */}
+        {/* TWO SEPARATE FLOATING CARDS (Side-by-Side: Speech Transcript & AI Solution) */}
         {!isCardCollapsed && (
-          <div className={`prateek-card no-drag ${cardTab === "split" ? "split-mode" : ""}`}>
-            {/* Card Top Navigation & Left/Right Tabs */}
-            <div className="prateek-card-top">
-              <div className="prateek-card-top-left">
-                {/* Previous / Next Question Navigation */}
-                <div className="prateek-history-nav">
+          <div className="prateek-two-cards-row no-drag">
+            
+            {/* LEFT CARD: SPEECH TRANSCRIPT */}
+            <div className="prateek-floating-card prateek-speech-card">
+              {/* Card Mini Toolbar */}
+              <div className="prateek-card-toolbar">
+                <div className="card-toolbar-left">
+                  {/* Green animated soundwave/equalizer bars */}
+                  <div className="prateek-equalizer-bars" title="Microphone Equalizer">
+                    <span className={`eq-bar bar-1 ${isCapturing ? "bouncing" : ""}`} />
+                    <span className={`eq-bar bar-2 ${isCapturing ? "bouncing" : ""}`} />
+                    <span className={`eq-bar bar-3 ${isCapturing ? "bouncing" : ""}`} />
+                    <span className={`eq-bar bar-4 ${isCapturing ? "bouncing" : ""}`} />
+                  </div>
+
+                  {/* Language Selector Dropdown */}
+                  <div className="prateek-lang-relative">
+                    <button
+                      className="prateek-lang-btn"
+                      onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+                      title="Select Speech Language"
+                    >
+                      <Globe size={13} className="text-slate-300" />
+                      <span className="lang-text">{selectedLanguage}</span>
+                      <ChevronDown size={11} className="text-slate-400" />
+                    </button>
+
+                    {isLangMenuOpen && (
+                      <div className="prateek-lang-dropdown">
+                        {languages.map((lang) => (
+                          <button
+                            key={lang}
+                            className={`lang-option ${selectedLanguage === lang ? "active" : ""}`}
+                            onClick={() => {
+                              setSelectedLanguage(lang);
+                              setIsLangMenuOpen(false);
+                            }}
+                          >
+                            {lang}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="card-toolbar-right">
                   <button
-                    className="prateek-nav-btn"
+                    className="prateek-mini-clear-btn"
+                    onClick={onClearTranscript}
+                    title="Clear Speech Transcript (Ctrl + Shift + Backspace)"
+                  >
+                    <span>Clear</span>
+                    <span className="mini-kbd">Ctrl ⇧ ⌫</span>
+                  </button>
+
+                  <button
+                    className="prateek-mini-expand-btn"
+                    title="Expand View"
+                  >
+                    <Maximize2 size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Speech Chat Body: Right-aligned messages */}
+              <div className="prateek-speech-chat-body">
+                {displayTranscript.map((item) => (
+                  <div key={item.id} className="prateek-chat-message-row">
+                    <div className="chat-message-text">{item.text}</div>
+                    <div className="chat-message-meta">
+                      {item.speaker === "Candidate" ? "You" : item.speaker} · {item.timestamp}
+                    </div>
+                  </div>
+                ))}
+
+                {/* LIVE INTERIM STREAM (while someone is speaking right now) */}
+                {isCapturing && interimText.trim() && (
+                  <div className="prateek-chat-message-row live">
+                    <div className="chat-message-text live">
+                      {interimText.trim()}
+                    </div>
+                    <div className="chat-message-meta live">
+                      <span className="live-dot-green" />
+                      <span>You · 03:57 PM</span>
+                    </div>
+                  </div>
+                )}
+                <div ref={speechStreamEndRef} />
+              </div>
+            </div>
+
+            {/* RIGHT CARD: AI SOLUTION / ANSWER */}
+            <div className="prateek-floating-card prateek-answer-card">
+              {/* Card Mini Toolbar */}
+              <div className="prateek-card-toolbar">
+                <div className="card-toolbar-left">
+                  <button
+                    className="prateek-mini-nav-btn"
                     onClick={handlePrev}
                     disabled={!canGoPrev}
-                    title="Previous Question (⌘ + ←)"
+                    title="Previous Answer (Ctrl + ←)"
                   >
-                    <span className="prateek-kbd">⌘←</span>
+                    <span>Ctrl ←</span>
                   </button>
                   <button
-                    className="prateek-nav-btn"
+                    className="prateek-mini-nav-btn"
                     onClick={handleNext}
                     disabled={!canGoNext}
-                    title="Next Question (⌘ + →)"
+                    title="Next Answer (Ctrl + →)"
                   >
-                    <span className="prateek-kbd">⌘→</span>
+                    <span>Ctrl →</span>
                   </button>
                 </div>
 
-                {/* Left & Right Segmented Tabs */}
-                <div className="prateek-segmented-tabs">
+                <div className="card-toolbar-right">
                   <button
-                    className={`prateek-tab-btn ${cardTab === "speech" ? "active" : ""}`}
-                    onClick={() => setCardTab("speech")}
-                    title="Live Speech Stream (⌘ + 1)"
+                    className="prateek-mini-clear-btn"
+                    onClick={onClearCurrentAnswer}
+                    title="Clear Answer (Ctrl + Backspace)"
                   >
-                    <Mic size={13} />
-                    <span>Speech</span>
-                    <span className="tab-kbd">⌘1</span>
+                    <span>Clear</span>
+                    <span className="mini-kbd">Ctrl ⌫</span>
                   </button>
 
                   <button
-                    className={`prateek-tab-btn ${cardTab === "answer" ? "active" : ""}`}
-                    onClick={() => setCardTab("answer")}
-                    title="AI Answer & Solution (⌘ + 2)"
+                    className="prateek-mini-expand-btn"
+                    title="Expand View"
                   >
-                    <Sparkles size={13} />
-                    <span>Answer</span>
-                    <span className="tab-kbd">⌘2</span>
-                  </button>
-
-                  <button
-                    className={`prateek-tab-btn ${cardTab === "split" ? "active" : ""}`}
-                    onClick={() => setCardTab("split")}
-                    title="Split: Speech on Left, Answer on Right (⌘ + 3)"
-                  >
-                    <Columns2 size={13} />
-                    <span>Split</span>
-                    <span className="tab-kbd">⌘3</span>
+                    <Maximize2 size={12} />
                   </button>
                 </div>
               </div>
 
-              <div className="prateek-card-top-right">
-                <button
-                  className="prateek-pill-btn prateek-pill-sm"
-                  onClick={onClearCurrentAnswer}
-                  title="Clear this Answer (⌘ + Backspace)"
-                >
-                  <span className="pill-text">Clear</span>
-                  <span className="prateek-kbd">⌘⌫</span>
-                </button>
-                <button
-                  className="prateek-icon-pill-btn"
-                  onClick={() => setIsCardCollapsed(true)}
-                  title="Minimize"
-                >
-                  <Minimize2 size={14} />
-                </button>
-              </div>
-            </div>
-
-            {/* CARD BODY: Tabs or Split View */}
-            <div className={`prateek-card-body ${cardTab === "split" ? "split" : "single"}`}>
-              {/* LEFT TAB / COLUMN: LIVE SPEECH STREAM */}
-              {(cardTab === "speech" || cardTab === "split") && (
-                <div className="prateek-question-panel">
-                  <div className="prateek-panel-subhead">
-                    <div className="subhead-left">
-                      <Mic size={14} className="icon-sky" />
-                      <span className="subhead-title">Speech Transcript</span>
-                      {isCapturing && (
-                        <div className="live-mic-status-badge">
-                          <span className="live-pulse-dot" />
-                          <span>LISTENING</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="subhead-right">
-                      {transcript.length > 0 && (
-                        <button
-                          className="prateek-copy-icon-btn"
-                          onClick={onClearTranscript}
-                          title="Clear Full Speech"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                      <button
-                        className="prateek-copy-icon-btn"
-                        onClick={handleCopyFullSpeech}
-                        title="Copy Full Speech Transcript"
-                      >
-                        {copiedSpeech ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                      </button>
-                    </div>
+              {/* Answer Content Body */}
+              <div className="prateek-answer-content-body">
+                {/* Question Row */}
+                <div className="answer-question-row">
+                  <div className="question-left">
+                    <span className="question-speech-icon">💬</span>
+                    <span className="question-label">Question:</span>
+                    <span className="question-text">
+                      {activeResponse?.prompt || "Explain yourself"}
+                    </span>
                   </div>
-
-                  {/* API KEY SETUP BANNER IF NOT CONFIGURED */}
-                  {(!apiKey || apiKey.trim().length < 15) && (
-                    <div className="prateek-api-alert">
-                      <div className="api-alert-left">
-                        <AlertTriangle size={13} className="icon-amber" />
-                        <span className="api-alert-text">
-                          To transcribe voice to text automatically, add your free Gemini API Key.
-                        </span>
-                      </div>
-                      <button className="btn-api-settings-link" onClick={onOpenSettings}>
-                        <Settings size={12} />
-                        <span>Settings</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* LIVE SPEECH TRANSCRIPT STREAM CONTAINER */}
-                  <div className="prateek-speech-stream-container">
-                    {transcript.length === 0 && !isCapturing && (
-                      <div className="prateek-empty-speech-state">
-                        <Mic size={24} className="text-slate-500" />
-                        <p className="empty-speech-title">Live Speech Transcript</p>
-                        <p className="empty-speech-desc">
-                          Turn on the mic (●) or press ⌘M. Everything spoken will display here in real time.
-                        </p>
-                      </div>
-                    )}
-
-                    {transcript.map((item) => (
-                      <div key={item.id} className="prateek-speech-turn">
-                        <div className="speech-turn-meta">
-                          <span className={`speaker-badge ${item.speaker.toLowerCase()}`}>
-                            {item.speaker}
-                          </span>
-                          <span className="speech-turn-time">{item.timestamp}</span>
-                        </div>
-                        <p className="speech-turn-text">{item.text}</p>
-                      </div>
-                    ))}
-
-                    {/* LIVE INTERIM STREAM (while someone is speaking right now) */}
-                    {isCapturing && (
-                      <div className="prateek-live-interim-bubble">
-                        <div className="live-interim-header">
-                          <span className="live-pulse-dot" />
-                          <span className="live-interim-title">{activeSpeaker} Speaking (Live)...</span>
-                        </div>
-                        <p className="live-interim-text">
-                          {interimText.trim()
-                            ? interimText.trim()
-                            : "Listening to microphone speech..."}
-                        </p>
-                      </div>
-                    )}
-                    <div ref={speechStreamEndRef} />
-                  </div>
-
-                  {/* Screen Snapshot Context (if available) */}
-                  {activeSnippet && (
-                    <div className="prateek-snippet-box">
-                      <div className="snippet-box-header">
-                        <Monitor size={12} className="icon-sky" />
-                        <span>Captured Screen Context</span>
-                      </div>
-                      <img
-                        src={activeSnippet.dataUrl}
-                        alt="Screen capture"
-                        className="snippet-preview-img"
-                      />
-                    </div>
-                  )}
-
+                  <button
+                    className="question-copy-btn"
+                    onClick={handleCopyQuestion}
+                    title="Copy Question"
+                  >
+                    {copiedQuestion ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                  </button>
                 </div>
-              )}
 
-              {/* RIGHT TAB / COLUMN: AI ANSWER & SOLUTION */}
-              {(cardTab === "answer" || cardTab === "split") && (
-                <div className="prateek-answer-panel">
-                  <div className="prateek-panel-subhead">
-                    <div className="subhead-left">
-                      <Sparkles size={14} className="icon-amber" />
-                      <span className="subhead-title">AI Solution</span>
-                      {activeResponse?.isStreaming && (
-                        <span className="generating-pulse">Generating...</span>
-                      )}
-                    </div>
-                    <div className="subhead-right">
-                      {profile.targetRole && (
-                        <span className="footer-profile-pill">{profile.targetRole}</span>
-                      )}
-                      <button
-                        className="prateek-copy-icon-btn"
-                        onClick={handleCopyAnswer}
-                        title="Copy Solution"
-                      >
-                        {copiedAnswer ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Display the Question extracted from the end of speech */}
-                  {activeResponse?.prompt && (
-                    <div className="prateek-solution-question-badge">
-                      <span className="solution-q-label">Q:</span>
-                      <span className="solution-q-text">{activeResponse.prompt}</span>
-                    </div>
-                  )}
-
-                  {/* Star TL;DR Summary */}
-                  <div className="prateek-tldr-line">
+                {/* Answer Main Content */}
+                <div className="answer-main-content">
+                  <div className="answer-star-row">
                     <span className="star-icon">⭐</span>
-                    <span className="answer-bold-label">Answer:</span>
-                    <span className="answer-tldr-text">{parsed.tldr}</span>
+                    <strong className="answer-bold-label">Answer:</strong>
                   </div>
+                  {renderFormattedAnswer(activeResponse?.content)}
 
-                  {/* Bullet Breakdown Points */}
-                  <div className="prateek-bullets-list">
-                    {parsed.bullets.map((b, idx) => (
-                      <div key={idx} className="prateek-bullet-item">
-                        <span className="bullet-dot">•</span>
-                        {b.prefix && <strong className="bullet-prefix">{b.prefix} </strong>}
-                        <span className="bullet-text">{b.text}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Streaming Indicator */}
                   {activeResponse?.isStreaming && (
-                    <div className="prateek-streaming-badge">
-                      <span className="pulse-dot" />
-                      <span>Synthesizing response...</span>
+                    <div className="answer-streaming-pulse">
+                      <span className="live-pulse-dot" />
+                      <span>Generating answer...</span>
                     </div>
                   )}
-
-                  {/* Footer Row: Timestamp & Feedback */}
-                  <div className="prateek-card-footer">
-                    <div className="footer-left">
-                      <span className="footer-meta">
-                        Answer · {activeResponse?.timestamp || new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date())}
-                      </span>
-                    </div>
-
-                    <div className="footer-actions">
-                      <button
-                        className={`prateek-feedback-btn ${feedback === "up" ? "active" : ""}`}
-                        onClick={() => {
-                          setFeedback("up");
-                          showToast("Helpful answer", "success");
-                        }}
-                        title="Helpful"
-                      >
-                        <ThumbsUp size={14} />
-                      </button>
-                      <button
-                        className={`prateek-feedback-btn ${feedback === "down" ? "active" : ""}`}
-                        onClick={() => {
-                          setFeedback("down");
-                          showToast("Feedback recorded", "info");
-                        }}
-                        title="Needs Improvement"
-                      >
-                        <ThumbsDown size={14} />
-                      </button>
-                      <button
-                        className="prateek-feedback-btn"
-                        onClick={handleCopyAnswer}
-                        title="Copy Solution"
-                      >
-                        {copiedAnswer ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                  </div>
                 </div>
-              )}
+
+                {/* Bottom resize/expand indicator */}
+                <div className="answer-card-bottom-actions">
+                  <button className="answer-bottom-resize-btn" title="Expand / Resize">
+                    <ChevronDown size={14} />
+                  </button>
+                  <button className="answer-bottom-expand-btn" title="Expand Solution">
+                    <Maximize2 size={12} />
+                  </button>
+                </div>
+              </div>
             </div>
+
           </div>
         )}
       </div>

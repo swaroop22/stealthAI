@@ -35,18 +35,27 @@ const DEFAULT_PROFILE: CandidateProfile = {
 };
 
 const DEFAULT_INITIAL_RESPONSE: AIResponse = {
-  id: "initial-url-browser-response",
-  mode: "system_design",
-  timestamp: "11:33",
-  prompt: "What happens when I type a URL into the browser?",
-  content: `⭐ **Answer:** DNS, connection, request, render.
+  id: "initial-explain-yourself-response",
+  mode: "coding",
+  timestamp: "03:57 PM",
+  prompt: "Explain yourself",
+  content: `I'm a **Lead Data Engineer** with more than 15 years of experience building and supporting enterprise data platforms across banking, healthcare, and pharmaceutical domains. My main strengths are **Python, SQL, Databricks, Apache Spark, dbt, Snowflake, and AWS**.
 
-• **Resolve:** the host goes through the cache chain, then the recursive resolver.
-• **Connect:** TCP handshake, then TLS — ALPN negotiates HTTP/2 here.
-• **Render:** the server responds; the browser parses HTML, builds the DO`,
+In my current role at **PNC**, I lead the enterprise data lakehouse migration and distributed analytics architecture.`,
   isStreaming: false,
-  tokensGenerated: 42
+  tokensGenerated: 58
 };
+
+const DEFAULT_INITIAL_TRANSCRIPT: TranscriptItem[] = [
+  { id: "init-1", timestamp: "03:56 PM", speaker: "Candidate", text: "Yeah." },
+  { id: "init-2", timestamp: "03:57 PM", speaker: "Candidate", text: "So. Then I could." },
+  { id: "init-3", timestamp: "03:57 PM", speaker: "Candidate", text: "China." },
+  { id: "init-4", timestamp: "03:57 PM", speaker: "Candidate", text: "Okay. So." },
+  { id: "init-5", timestamp: "03:57 PM", speaker: "Candidate", text: "Of course." },
+  { id: "init-6", timestamp: "03:57 PM", speaker: "Candidate", text: "You." },
+  { id: "init-7", timestamp: "03:57 PM", speaker: "Candidate", text: "Didn't. Didn't. Know." },
+  { id: "init-8", timestamp: "03:57 PM", speaker: "Candidate", text: "This." },
+];
 
 export default function App() {
   const [viewMode, setViewMode] = useState<"overlay" | "dashboard">("overlay");
@@ -75,13 +84,13 @@ export default function App() {
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [interimText, setInterimText] = useState<string>("");
   const [activeSpeaker, setActiveSpeaker] = useState<SpeakerType>("Interviewer");
-  const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
+  const [transcript, setTranscript] = useState<TranscriptItem[]>(DEFAULT_INITIAL_TRANSCRIPT);
   const [activeSnippet, setActiveSnippet] = useState<ScreenSnippet | null>(null);
   const [activeMode, setActiveMode] = useState<AssistantMode>("coding");
 
   // Multi-response history
   const [responses, setResponses] = useState<AIResponse[]>([DEFAULT_INITIAL_RESPONSE]);
-  const [activeResponseId, setActiveResponseId] = useState<string | null>("initial-url-browser-response");
+  const [activeResponseId, setActiveResponseId] = useState<string | null>("initial-explain-yourself-response");
 
   const [autoAnswer, setAutoAnswer] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
