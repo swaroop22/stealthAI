@@ -385,6 +385,16 @@ export default function App() {
         }
         return;
       }
+
+      // ⌘ + \ or ⌘ + H: Toggle/Hide Window
+      if (e.key === "\\" || e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        const electron = (window as any).electronAPI;
+        if (electron?.toggleWindow) {
+          electron.toggleWindow();
+        }
+        return;
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);

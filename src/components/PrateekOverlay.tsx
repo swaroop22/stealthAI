@@ -19,7 +19,9 @@ import {
   Columns2,
   Sparkles,
   AlertTriangle,
-  Trash2
+  Trash2,
+  EyeOff,
+  ShieldCheck
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
 
@@ -304,6 +306,21 @@ export const PrateekOverlay: React.FC<Props> = ({
               {isCardCollapsed ? <Maximize2 size={15} /> : <Minimize2 size={15} />}
             </button>
 
+            <button
+              className="prateek-tool-icon-btn"
+              onClick={() => {
+                const electron = (window as any).electronAPI;
+                if (electron?.hideWindow) {
+                  electron.hideWindow();
+                } else {
+                  setIsCardCollapsed(true);
+                }
+              }}
+              title="Stealth Hide: Hide from laptop screen (⌘\ to toggle back)"
+            >
+              <EyeOff size={15} />
+            </button>
+
             <div className="prateek-menu-relative">
               <button
                 className="prateek-tool-icon-btn"
@@ -315,6 +332,17 @@ export const PrateekOverlay: React.FC<Props> = ({
 
               {isMoreMenuOpen && (
                 <div className="prateek-dropdown-menu">
+                  <button
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      const electron = (window as any).electronAPI;
+                      if (electron?.hideWindow) electron.hideWindow();
+                    }}
+                    title="Hide overlay from screen. Press ⌘\ anytime to bring it back."
+                  >
+                    <EyeOff size={15} />
+                    <span>Hide Window (⌘\)</span>
+                  </button>
                   <button
                     onClick={() => {
                       setIsMoreMenuOpen(false);

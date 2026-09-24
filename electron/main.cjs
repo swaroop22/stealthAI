@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, desktopCapturer, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, session, desktopCapturer, ipcMain, shell, globalShortcut } = require('electron');
 const path = require('path');
 
 // Pass Google API Key if provided via environment
@@ -38,6 +38,17 @@ function createWindow() {
   mainWindow.setAlwaysOnTop(true, 'floating', 1);
   if (mainWindow.setVisibleOnAllWorkspaces) {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+
+  // 1. Content Protection (Screen Share Invisibility):
+  // Makes this window 100% invisible to screen sharing (Zoom, Google Meet, Microsoft Teams, Discord, etc.)
+  // and screen recording software. Only the user looking at the physical screen can see it.
+  mainWindow.setContentProtection(true);
+
+  // 2. Stealth Dock Mode:
+  // Hide from macOS Dock and Cmd+Tab application switcher so it runs completely covertly
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide();
   }
 
   // Display capture handler for navigator.mediaDevices.getDisplayMedia
@@ -107,6 +118,22 @@ ipcMain.on('close-window', () => {
 
 ipcMain.on('minimize-window', () => {
   if (mainWindow) mainWindow.minimize();
+});
+
+ipcMain.on('hide-window', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+});
+
+ipcMain.on('toggle-window', () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isVisible()) {
+    mainWindow.hide();
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 });
 
 ipcMain.on('resize-window', (e, { width, height }) => {
@@ -231,9 +258,38 @@ ipcMain.on('stop-native-speech', () => {
 app.whenReady().then(() => {
   createWindow();
 
+  // Register Global Panic Shortcuts (works system-wide from any app on macOS)
+  // Press ⌘ + \ or ⌘ + Shift + H to instantly hide or reveal StealthAI
+  try {
+    globalShortcut.register('CommandOrControl+\\', () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+
+    globalShortcut.register('CommandOrControl+Shift+H', () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+  } catch (err) {
+    console.warn('Failed to register global shortcut:', err);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+    } else if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.focus();
     }
   });
 });
@@ -242,6 +298,13 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  try {
+    globalShortcut.unregisterAll();
+  } catch (e) {}
+  stopSpeechProcess();
 });
 
 app.on('before-quit', () => {

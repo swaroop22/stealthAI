@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSources: () => ipcRenderer.invoke('get-screen-sources'),
   closeWindow: () => ipcRenderer.send('close-window'),
   minimizeWindow: () => ipcRenderer.send('minimize-window'),
+  hideWindow: () => ipcRenderer.send('hide-window'),
+  toggleWindow: () => ipcRenderer.send('toggle-window'),
   resizeWindow: (width, height) => ipcRenderer.send('resize-window', { width, height }),
   startNativeSpeech: () => ipcRenderer.send('start-native-speech'),
   stopNativeSpeech: () => ipcRenderer.send('stop-native-speech'),
