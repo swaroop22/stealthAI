@@ -152,20 +152,24 @@ function stopSpeechProcess() {
   }
 }
 
-ipcMain.on('start-native-speech', () => {
+ipcMain.on('start-native-speech', (event) => {
   stopSpeechProcess();
 
-  const candidatePaths = [
-    path.join(__dirname, 'stealth_speech_helper'),
-    path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'stealth_speech_helper'),
-    path.join(process.resourcesPath, 'electron', 'stealth_speech_helper'),
-    path.join(path.dirname(process.execPath), 'stealth_speech_helper'),
-    path.join(path.dirname(process.execPath), '..', 'Resources', 'electron', 'stealth_speech_helper')
-  ];
+  let binPath = null;
+  if (app.isPackaged) {
+    const packagedCandidates = [
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'stealth_speech_helper'),
+      path.join(process.resourcesPath, 'electron', 'stealth_speech_helper'),
+      path.join(path.dirname(process.execPath), 'stealth_speech_helper'),
+      path.join(path.dirname(process.execPath), '..', 'Resources', 'electron', 'stealth_speech_helper')
+    ];
+    binPath = packagedCandidates.find((p) => fs.existsSync(p));
+  } else {
+    binPath = path.join(__dirname, 'stealth_speech_helper');
+  }
 
-  const binPath = candidatePaths.find((p) => fs.existsSync(p));
-  if (!binPath) {
-    console.warn('Native speech helper binary not found at candidates:', candidatePaths);
+  if (!binPath || !fs.existsSync(binPath)) {
+    console.warn('Native speech helper binary not found. BinPath was:', binPath);
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('native-speech-event', {
         type: 'error',
@@ -178,6 +182,14 @@ ipcMain.on('start-native-speech', () => {
   try {
     speechProcess = spawn(binPath, [], {
       stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    speechProcess.on('error', (err) => {
+      console.error('Speech process error:', err);
+      speechProcess = null;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('native-speech-event', { type: 'error', message: err.message });
+      }
     });
 
     const rl = readline.createInterface({
