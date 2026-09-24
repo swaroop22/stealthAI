@@ -244,6 +244,17 @@ export class AIEngine {
     const frameworksList = profile.frameworks?.slice(0, 6).join(", ") || "Docker, Kubernetes, AWS, PostgreSQL, Redis, Kafka";
     const rawResume = profile.resumeText || "";
 
+    // 0. Networking: URL into browser (Matches PRATEEK AI)
+    if (p.includes("url") && (p.includes("browser") || p.includes("type"))) {
+      return [
+        "⭐ **Answer:** DNS, connection, request, render.",
+        "",
+        "• **Resolve:** the host goes through the cache chain, then the recursive resolver.",
+        "• **Connect:** TCP handshake, then TLS — ALPN negotiates HTTP/2 here.",
+        "• **Render:** the server responds; the browser parses HTML, builds the DOM, and executes scripts."
+      ].join("\n");
+    }
+
     // 1. Check if the question is asking for an Introduction / Resume Walkthrough / Experience
     const isIntroOrResume =
       p.includes("tell me about yourself") ||

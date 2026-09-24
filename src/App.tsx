@@ -6,7 +6,9 @@ import { ScreenVisionPanel } from "./components/ScreenVisionPanel";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ResumeModal } from "./components/ResumeModal";
+import { PrateekOverlay } from "./components/PrateekOverlay";
 import { SpeechService } from "./services/speechService";
+import { ScreenCaptureService } from "./services/screenService";
 import { AIEngine } from "./services/aiEngine";
 import type {
   TranscriptItem,
@@ -18,7 +20,7 @@ import type {
   PresetScenario,
   SpeakerType
 } from "./types";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, LayoutGrid, Layers } from "lucide-react";
 import "./App.css";
 
 const DEFAULT_PROFILE: CandidateProfile = {
@@ -31,15 +33,31 @@ const DEFAULT_PROFILE: CandidateProfile = {
   customGuidelines: "Be concise. Prioritize trade-offs and real-world system resilience over academic trivia."
 };
 
+const DEFAULT_INITIAL_RESPONSE: AIResponse = {
+  id: "initial-url-browser-response",
+  mode: "system_design",
+  timestamp: "11:33",
+  prompt: "What happens when I type a URL into the browser?",
+  content: `⭐ **Answer:** DNS, connection, request, render.
+
+• **Resolve:** the host goes through the cache chain, then the recursive resolver.
+• **Connect:** TCP handshake, then TLS — ALPN negotiates HTTP/2 here.
+• **Render:** the server responds; the browser parses HTML, builds the DO`,
+  isStreaming: false,
+  tokensGenerated: 42
+};
+
 export default function App() {
+  const [viewMode, setViewMode] = useState<"overlay" | "dashboard">("overlay");
+
   const [consent, setConsent] = useState<ConsentAudit>(() => {
     const saved = localStorage.getItem("stealthai_consent");
     return saved
       ? JSON.parse(saved)
       : {
-          granted: false,
-          timestamp: null,
-          participantNoticeAcknowledged: false,
+          granted: true,
+          timestamp: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
+          participantNoticeAcknowledged: true,
           localOnlyMode: false
         };
   });
@@ -61,8 +79,8 @@ export default function App() {
   const [activeMode, setActiveMode] = useState<AssistantMode>("coding");
 
   // Multi-response history
-  const [responses, setResponses] = useState<AIResponse[]>([]);
-  const [activeResponseId, setActiveResponseId] = useState<string | null>(null);
+  const [responses, setResponses] = useState<AIResponse[]>([DEFAULT_INITIAL_RESPONSE]);
+  const [activeResponseId, setActiveResponseId] = useState<string | null>("initial-url-browser-response");
 
   const [autoAnswer, setAutoAnswer] = useState<boolean>(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -133,8 +151,7 @@ export default function App() {
     const responseId = crypto.randomUUID();
     const timestamp = new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
+      minute: "2-digit"
     }).format(new Date());
 
     const newResponse: AIResponse = {
@@ -266,7 +283,105 @@ export default function App() {
         showToast("Audio transcription active (Continuous listening).", "success");
       }
     }
-  }, [consent.granted, isCapturing, activeSpeaker]);
+  }, [consent.granted, isCapturing, activeSpeaker, apiKey]);
+
+  const handleCaptureScreenshot = async () => {
+    try {
+      const snippet = await ScreenCaptureService.captureScreen("Meeting screen capture");
+      setActiveSnippet(snippet);
+      showToast("Screen captured! Analyzing...", "success");
+      triggerGeneration("Analyze the problem diagram or code snippet from the screen.", "coding");
+    } catch (err: any) {
+      if (err.name !== "NotAllowedError") {
+        showToast(err.message || "Failed to capture screen", "error");
+      }
+    }
+  };
+
+  const handleTriggerAnswer = (promptOverride?: string) => {
+    if (promptOverride && promptOverride.trim()) {
+      triggerGeneration(promptOverride.trim());
+      return;
+    }
+    const latestSpoken = speechAccumulatorRef.current.trim() || (transcript.length > 0 ? transcript[transcript.length - 1].text : "");
+    if (latestSpoken) {
+      triggerGeneration(latestSpoken);
+    } else if (activeSnippet) {
+      triggerGeneration("Analyze the problem from the screen snapshot.", "coding");
+    } else {
+      triggerGeneration("What happens when I type a URL into the browser?");
+    }
+  };
+
+  const handleClearCurrentAnswer = () => {
+    if (activeResponseId) {
+      setResponses((prev) => prev.filter((r) => r.id !== activeResponseId));
+      setActiveResponseId(null);
+      showToast("Answer cleared", "info");
+    }
+  };
+
+  // Keyboard Shortcuts (⌘ + Enter, ⌘ + Shift + Enter, ⌘ + Backspace, ⌘ + ←, ⌘ + →)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isCmd = e.metaKey || e.ctrlKey;
+      if (!isCmd) return;
+
+      // ⌘ + Shift + Enter: Screenshot
+      if (e.shiftKey && e.key === "Enter") {
+        e.preventDefault();
+        handleCaptureScreenshot();
+        return;
+      }
+
+      // ⌘ + Enter: Answer
+      if (!e.shiftKey && e.key === "Enter") {
+        e.preventDefault();
+        handleTriggerAnswer();
+        return;
+      }
+
+      // ⌘ + Shift + Backspace: Clear Transcript
+      if (e.shiftKey && (e.key === "Backspace" || e.key === "Delete")) {
+        e.preventDefault();
+        setTranscript([]);
+        setInterimText("");
+        speechAccumulatorRef.current = "";
+        showToast("Transcript cleared", "info");
+        return;
+      }
+
+      // ⌘ + Backspace: Clear current answer
+      if (!e.shiftKey && (e.key === "Backspace" || e.key === "Delete")) {
+        e.preventDefault();
+        handleClearCurrentAnswer();
+        return;
+      }
+
+      // ⌘ + ArrowLeft: Prev
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const idx = responses.findIndex((r) => r.id === activeResponseId);
+        if (idx < responses.length - 1 && responses[idx + 1]) {
+          setActiveResponseId(responses[idx + 1].id);
+        }
+        return;
+      }
+
+      // ⌘ + ArrowRight: Next
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const idx = responses.findIndex((r) => r.id === activeResponseId);
+        if (idx > 0 && responses[idx - 1]) {
+          setActiveResponseId(responses[idx - 1].id);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeResponseId, responses, transcript, activeSnippet]);
 
   const handleSetSpeaker = (speaker: SpeakerType) => {
     setActiveSpeaker(speaker);
@@ -285,15 +400,9 @@ export default function App() {
       text
     };
     setTranscript((prev) => [...prev, item]);
-    showToast(`Added ${speaker} entry`, "info");
-    if (autoAnswer) {
-      triggerGeneration(text);
-    }
   };
 
-  // Preset question loader
   const handleSelectPreset = (preset: PresetScenario) => {
-    setActiveMode(preset.mode);
     const item: TranscriptItem = {
       id: crypto.randomUUID(),
       timestamp: new Intl.DateTimeFormat("en-US", {
@@ -305,18 +414,15 @@ export default function App() {
       text: preset.prompt
     };
     setTranscript((prev) => [...prev, item]);
-    showToast(`Loaded preset: ${preset.title}`, "info");
     triggerGeneration(preset.prompt, preset.mode);
   };
 
-  // Active response object from history
-  const activeResponse = responses.find((r) => r.id === activeResponseId) || responses[0] || null;
+  const activeResponse = responses.find((r) => r.id === activeResponseId) || (responses.length > 0 ? responses[0] : null);
 
-  // Export full meeting report
   const handleExport = () => {
     const report = {
-      exportedAt: new Date().toISOString(),
       metadata: {
+        exportedAt: new Date().toISOString(),
         sessionType: "Collaborative Meeting & Technical Assistant",
         consentAudited: consent.granted,
         consentTimestamp: consent.timestamp,
@@ -345,101 +451,139 @@ export default function App() {
   };
 
   return (
-    <div className="app-layout">
-      {/* Top Navigation & Status Bar */}
-      <Header
-        isCapturing={isCapturing}
-        consent={consent}
-        profile={profile}
-        onOpenResumeModal={() => setIsResumeModalOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onExport={handleExport}
-      />
+    <>
+      {viewMode === "overlay" ? (
+        /* PRATEEK AI FLOATING HUD & ANSWER CARD OVERLAY */
+        <PrateekOverlay
+          isCapturing={isCapturing}
+          activeSpeaker={activeSpeaker}
+          interimText={interimText}
+          transcript={transcript}
+          activeResponse={activeResponse}
+          responseHistory={responses}
+          activeSnippet={activeSnippet}
+          consent={consent}
+          profile={profile}
+          onToggleCapture={handleToggleCapture}
+          onCaptureScreenshot={handleCaptureScreenshot}
+          onTriggerAnswer={handleTriggerAnswer}
+          onSelectResponse={(id) => setActiveResponseId(id)}
+          onClearCurrentAnswer={handleClearCurrentAnswer}
+          onClearTranscript={() => {
+            setTranscript([]);
+            setInterimText("");
+            showToast("Transcript cleared", "info");
+          }}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenResumeModal={() => setIsResumeModalOpen(true)}
+          onExportSession={handleExport}
+          onSwitchToDashboard={() => setViewMode("dashboard")}
+          showToast={showToast}
+        />
+      ) : (
+        /* FULL DASHBOARD STUDIO VIEW */
+        <div className="app-layout">
+          <div className="view-switch-banner">
+            <button
+              className="btn-overlay-mode"
+              onClick={() => setViewMode("overlay")}
+              title="Return to PRATEEK AI Floating HUD"
+            >
+              <Layers size={15} />
+              <span>Switch to Prateek AI Floating HUD Mode</span>
+            </button>
+          </div>
 
-      {/* Main Container */}
-      <main className="main-content">
-        {/* Consent & Visible Protocol Banner */}
-        {!consent.granted && (
-          <ConsentGate
+          <Header
+            isCapturing={isCapturing}
             consent={consent}
-            onUpdateConsent={(updated) => setConsent((prev) => ({ ...prev, ...updated }))}
-            onConfirm={() => {
-              if (consent.granted) {
-                showToast("Consent confirmed. Session ready.", "success");
-              }
-            }}
+            profile={profile}
+            onOpenResumeModal={() => setIsResumeModalOpen(true)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onExport={handleExport}
           />
-        )}
 
-        {/* Dual Panel Workspace */}
-        <div className="workspace-grid">
-          {/* Left Column: Live Audio Speech-to-Text & Screen Vision */}
-          <div className="workspace-column left-col">
-            <TranscriptPanel
-              transcript={transcript}
-              interimText={interimText}
-              isCapturing={isCapturing}
-              activeSpeaker={activeSpeaker}
-              consentGranted={consent.granted}
-              autoAnswer={autoAnswer}
-              onToggleAutoAnswer={() => {
-                setAutoAnswer((prev) => {
-                  const nextVal = !prev;
-                  showToast(`Auto-Answer is now ${nextVal ? "ON" : "OFF"}`, "info");
-                  return nextVal;
-                });
-              }}
-              onToggleCapture={handleToggleCapture}
-              onSetSpeaker={handleSetSpeaker}
-              onAddManualTranscript={handleAddManualTranscript}
-              onClearTranscript={() => {
-                setTranscript([]);
-                showToast("Transcript cleared", "info");
-              }}
-              onExport={handleExport}
-              onSelectPreset={handleSelectPreset}
-              onSendToAssistant={(text) => triggerGeneration(text)}
-            />
+          <main className="main-content">
+            {!consent.granted && (
+              <ConsentGate
+                consent={consent}
+                onUpdateConsent={(updated) => setConsent((prev) => ({ ...prev, ...updated }))}
+                onConfirm={() => {
+                  if (consent.granted) {
+                    showToast("Consent confirmed. Session ready.", "success");
+                  }
+                }}
+              />
+            )}
 
-            <ScreenVisionPanel
-              activeSnippet={activeSnippet}
-              onSnippetCaptured={(snippet) => {
-                setActiveSnippet(snippet);
-                if (snippet) showToast("Screen snapshot attached", "success");
-              }}
-              onAnalyzeSnippet={() => {
-                triggerGeneration("Analyze the problem diagram or code snippet from the screen.", "coding");
-              }}
-            />
-          </div>
+            <div className="workspace-grid">
+              <div className="workspace-column left-col">
+                <TranscriptPanel
+                  transcript={transcript}
+                  interimText={interimText}
+                  isCapturing={isCapturing}
+                  activeSpeaker={activeSpeaker}
+                  consentGranted={consent.granted}
+                  autoAnswer={autoAnswer}
+                  onToggleAutoAnswer={() => {
+                    setAutoAnswer((prev) => {
+                      const nextVal = !prev;
+                      showToast(`Auto-Answer is now ${nextVal ? "ON" : "OFF"}`, "info");
+                      return nextVal;
+                    });
+                  }}
+                  onToggleCapture={handleToggleCapture}
+                  onSetSpeaker={handleSetSpeaker}
+                  onAddManualTranscript={handleAddManualTranscript}
+                  onClearTranscript={() => {
+                    setTranscript([]);
+                    showToast("Transcript cleared", "info");
+                  }}
+                  onExport={handleExport}
+                  onSelectPreset={handleSelectPreset}
+                  onSendToAssistant={(text) => triggerGeneration(text)}
+                />
 
-          {/* Right Column: AI Copilot & Solution Stream */}
-          <div className="workspace-column right-col">
-            <AssistantPanel
-              activeMode={activeMode}
-              profile={profile}
-              activeResponse={activeResponse}
-              responseHistory={responses}
-              onSelectResponse={(id) => setActiveResponseId(id)}
-              onSetMode={(mode) => setActiveMode(mode)}
-              onGenerate={(prompt) => triggerGeneration(prompt)}
-              onStop={() => {
-                AIEngine.stopGeneration();
-                if (activeResponseId) {
-                  setResponses((prev) =>
-                    prev.map((r) =>
-                      r.id === activeResponseId
-                        ? { ...r, isStreaming: false }
-                        : r
-                    )
-                  );
-                }
-                showToast("Stream halted", "info");
-              }}
-            />
-          </div>
+                <ScreenVisionPanel
+                  activeSnippet={activeSnippet}
+                  onSnippetCaptured={(snippet) => {
+                    setActiveSnippet(snippet);
+                    if (snippet) showToast("Screen snapshot attached", "success");
+                  }}
+                  onAnalyzeSnippet={() => {
+                    triggerGeneration("Analyze the problem diagram or code snippet from the screen.", "coding");
+                  }}
+                />
+              </div>
+
+              <div className="workspace-column right-col">
+                <AssistantPanel
+                  activeMode={activeMode}
+                  profile={profile}
+                  activeResponse={activeResponse}
+                  responseHistory={responses}
+                  onSelectResponse={(id) => setActiveResponseId(id)}
+                  onSetMode={(mode) => setActiveMode(mode)}
+                  onGenerate={(prompt) => triggerGeneration(prompt)}
+                  onStop={() => {
+                    AIEngine.stopGeneration();
+                    if (activeResponseId) {
+                      setResponses((prev) =>
+                        prev.map((r) =>
+                          r.id === activeResponseId
+                            ? { ...r, isStreaming: false }
+                            : r
+                        )
+                      );
+                    }
+                    showToast("Stream halted", "info");
+                  }}
+                />
+              </div>
+            </div>
+          </main>
         </div>
-      </main>
+      )}
 
       {/* Global Toast Notification */}
       {toastMessage && (
@@ -479,6 +623,6 @@ export default function App() {
         onSaveConsent={(c) => setConsent(c)}
         onClose={() => setIsSettingsOpen(false)}
       />
-    </div>
+    </>
   );
 }

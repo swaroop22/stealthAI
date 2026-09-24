@@ -2,6 +2,13 @@ import type { PresetScenario } from "../types";
 
 export const PRESET_SCENARIOS: PresetScenario[] = [
   {
+    id: "networking-url-browser",
+    title: "Networking: What happens when I type a URL into the browser?",
+    mode: "system_design",
+    speaker: "Interviewer",
+    prompt: "What happens when I type a URL into the browser?"
+  },
+  {
     id: "resume-pitch",
     title: "Resume: Tell me about yourself",
     mode: "behavioral",
