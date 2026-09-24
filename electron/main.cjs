@@ -45,12 +45,6 @@ function createWindow() {
   // and screen recording software. Only the user looking at the physical screen can see it.
   mainWindow.setContentProtection(true);
 
-  // 2. Stealth Dock Mode:
-  // Hide from macOS Dock and Cmd+Tab application switcher so it runs completely covertly
-  if (process.platform === 'darwin' && app.dock) {
-    app.dock.hide();
-  }
-
   // Display capture handler for navigator.mediaDevices.getDisplayMedia
   if (session.defaultSession.setDisplayMediaRequestHandler) {
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
@@ -97,6 +91,10 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    mainWindow.focus();
+    if (process.platform === 'darwin') {
+      app.focus({ steal: true });
+    }
   });
 
   if (isDev) {
@@ -123,6 +121,7 @@ ipcMain.on('minimize-window', () => {
 ipcMain.on('hide-window', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.hide();
+    if (process.platform === 'darwin' && app.dock) app.dock.hide();
   }
 });
 
@@ -130,9 +129,12 @@ ipcMain.on('toggle-window', () => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isVisible()) {
     mainWindow.hide();
+    if (process.platform === 'darwin' && app.dock) app.dock.hide();
   } else {
+    if (process.platform === 'darwin' && app.dock) app.dock.show();
     mainWindow.show();
     mainWindow.focus();
+    if (process.platform === 'darwin') app.focus({ steal: true });
   }
 });
 
@@ -261,25 +263,21 @@ app.whenReady().then(() => {
   // Register Global Panic Shortcuts (works system-wide from any app on macOS)
   // Press ⌘ + \ or ⌘ + Shift + H to instantly hide or reveal StealthAI
   try {
-    globalShortcut.register('CommandOrControl+\\', () => {
+    const toggleAppVisibility = () => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       if (mainWindow.isVisible()) {
         mainWindow.hide();
+        if (process.platform === 'darwin' && app.dock) app.dock.hide();
       } else {
+        if (process.platform === 'darwin' && app.dock) app.dock.show();
         mainWindow.show();
         mainWindow.focus();
+        if (process.platform === 'darwin') app.focus({ steal: true });
       }
-    });
+    };
 
-    globalShortcut.register('CommandOrControl+Shift+H', () => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      if (mainWindow.isVisible()) {
-        mainWindow.hide();
-      } else {
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    });
+    globalShortcut.register('CommandOrControl+\\', toggleAppVisibility);
+    globalShortcut.register('CommandOrControl+Shift+H', toggleAppVisibility);
   } catch (err) {
     console.warn('Failed to register global shortcut:', err);
   }
