@@ -90,6 +90,8 @@ export default function App() {
   const autoAnswerRef = useRef<boolean>(true);
   const speechAccumulatorRef = useRef<string>("");
   const autoAnswerTimerRef = useRef<any>(null);
+  const lastTriggerTimeRef = useRef<number>(0);
+  const isGeneratingRef = useRef<boolean>(false);
   const triggerGenRef = useRef<(prompt: string, modeOverride?: AssistantMode) => void>(() => {});
 
   useEffect(() => {
@@ -179,6 +181,8 @@ export default function App() {
     // Add to history and make active
     setResponses((prev) => [newResponse, ...prev]);
     setActiveResponseId(responseId);
+    isGeneratingRef.current = true;
+    lastTriggerTimeRef.current = Date.now();
 
     AIEngine.generateStreamingResponse(
       cleanPrompt,
@@ -201,6 +205,7 @@ export default function App() {
           );
         },
         onComplete: (finalText) => {
+          isGeneratingRef.current = false;
           setResponses((prev) =>
             prev.map((r) =>
               r.id === responseId
@@ -215,6 +220,7 @@ export default function App() {
           showToast("AI solution ready", "success");
         },
         onError: (err) => {
+          isGeneratingRef.current = false;
           showToast(err, "error");
           setResponses((prev) =>
             prev.map((r) =>
@@ -264,11 +270,11 @@ export default function App() {
           setTranscript((prev) => [...prev, finalItem]);
           setInterimText("");
 
-          // AUTO-ANSWER WITH CONTINUOUS BUFFERING:
+          // AUTO-ANSWER WITH INTELLIGENT BUFFERING & COOLDOWN:
           const trimmedItem = finalItem.text.trim();
           const isSystemNotice = trimmedItem.startsWith("[") && trimmedItem.endsWith("]");
 
-          if (autoAnswerRef.current && trimmedItem.length > 2 && !isSystemNotice) {
+          if (autoAnswerRef.current && trimmedItem.length > 1 && !isSystemNotice) {
             speechAccumulatorRef.current = (speechAccumulatorRef.current + " " + trimmedItem).trim();
 
             if (autoAnswerTimerRef.current) {
@@ -277,12 +283,28 @@ export default function App() {
 
             autoAnswerTimerRef.current = setTimeout(() => {
               const fullQuestion = speechAccumulatorRef.current.trim();
-              if (fullQuestion.length > 3 && !fullQuestion.startsWith("[")) {
-                showToast(`Answering question: "${fullQuestion.slice(0, 32)}..."`, "info");
-                triggerGenRef.current(fullQuestion);
+              const words = fullQuestion.split(/\s+/).filter(Boolean);
+              const cleanLower = fullQuestion.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+
+              const FILLERS = [
+                "what", "what?", "is that all", "is that all?", "yeah", "ok", "okay",
+                "um", "uh", "yes", "no", "sure", "right", "i see", "got it", "hello",
+                "hi", "thanks", "thank you", "bye", "goodbye"
+              ];
+              const isFiller = FILLERS.includes(cleanLower) || (words.length < 3 && fullQuestion.length < 14);
+
+              // Only trigger automatically on substantive questions (at least 3 words, >= 14 chars, not filler)
+              if (!isFiller && fullQuestion.length >= 14 && !fullQuestion.startsWith("[")) {
+                const now = Date.now();
+                // Cooldown: prevent spamming more than 1 request per 3.5 seconds
+                if (now - lastTriggerTimeRef.current >= 3500 && !isGeneratingRef.current) {
+                  lastTriggerTimeRef.current = now;
+                  showToast(`Answering: "${fullQuestion.slice(0, 32)}..."`, "info");
+                  triggerGenRef.current(fullQuestion);
+                  speechAccumulatorRef.current = "";
+                }
               }
-              speechAccumulatorRef.current = "";
-            }, 1000);
+            }, 2200);
           }
         },
         (interim) => {

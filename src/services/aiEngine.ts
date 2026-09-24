@@ -18,7 +18,9 @@ export class AIEngine {
 
   private static readonly FLASH_MODELS = [
     "gemini-3.6-flash",
+    "gemini-flash-lite-latest",
     "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
     "gemini-flash-latest"
   ];
 
@@ -40,7 +42,11 @@ export class AIEngine {
         return;
       } catch (err: any) {
         if (signal.aborted) return;
-        console.warn("Live API call failed, falling back to built-in model engine:", err);
+        const errMsg = String(err?.message || err);
+        console.warn("Live API call failed, falling back to built-in model engine:", errMsg);
+        if (errMsg.includes("429") || errMsg.includes("quota")) {
+          callbacks.onToken("⚡ *[Notice: Gemini Free Tier 15 req/min rate limit reached. Using intelligent local engine while quota resets...]*\n\n", "");
+        }
       }
     }
 
@@ -200,6 +206,46 @@ export class AIEngine {
       } catch (err: any) {
         if (signal.aborted) return;
         lastError = err;
+      }
+    }
+
+    // Secondary fallback: Try standard non-streaming generateContent if streaming SSE failed
+    for (const model of this.FLASH_MODELS) {
+      if (signal.aborted) return;
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstructions }] },
+            contents,
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 2048
+            }
+          }),
+          signal
+        });
+
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text && text.trim().length > 0) {
+          const words = text.split(/(\s+|\n)/);
+          let accumulated = "";
+          for (const word of words) {
+            if (signal.aborted) return;
+            accumulated += word;
+            callbacks.onToken(word, accumulated);
+            await new Promise((r) => setTimeout(r, 6));
+          }
+          callbacks.onComplete(accumulated);
+          return;
+        }
+      } catch (e: any) {
+        if (signal.aborted) return;
       }
     }
 
@@ -508,39 +554,52 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 5. General Technical Query
+    // 5. Java & Java 11
+    if (p.includes("java 11") || (p.includes("java") && (p.includes("8") || p.includes("17") || p.includes("version") || p.includes("feature") || p.includes("tell") || p.includes("about") || p.includes("new")))) {
+      return [
+        "⭐ **Java 11 (LTS) — Key Highlights & Production Upgrades:**",
+        "",
+        "• **Major LTS Baseline:** Released in September 2018 as the premier Long-Term Support release following Java 8, transitioning enterprises to the modular JDK runtime.",
+        "• **Local Variable Type Inference (`var`) in Lambdas:** Extends Java 10's `var` to formal parameters of lambda expressions, allowing parameter annotations like `(@Nonnull var x, var y) -> x.process(y)`.",
+        "• **Standard HTTP Client (`java.net.http.HttpClient`):** Fully standardized native HTTP client replacing legacy `HttpURLConnection`. Supports both HTTP/1.1 and HTTP/2, synchronous/asynchronous non-blocking reactive streams, and WebSockets.",
+        "• **New String Utility Methods:** Added clean built-ins: `String.isBlank()`, `String.lines()`, `String.strip()` (Unicode-aware whitespace removal), and `String.repeat(n)`.",
+        "• **Flight Recorder (JFR):** Integrated the low-overhead profiling and event diagnostics tool Java Flight Recorder directly into OpenJDK for live production monitoring.",
+        "• **ZGC (Z Garbage Collector):** Experimental scalable low-latency collector targeting sub-10ms pause times even across multi-terabyte heap sizes.",
+        "• **Module Cleanup:** Officially removed deprecated Java EE modules (JAXB, JAX-WS, CORBA) from the standard runtime."
+      ].join("\n");
+    }
+
+    // 6. Spring Boot & Microservices
+    if (p.includes("spring") || p.includes("microservice") || p.includes("rest api")) {
+      return [
+        "⭐ **Spring Boot & Enterprise Microservices Architecture:**",
+        "",
+        "• **Core Philosophy:** Convention-over-configuration with starter dependencies, eliminating boilerplate XML and enabling self-contained JAR deployments with embedded Tomcat/Netty.",
+        "• **Auto-Configuration:** Dynamically registers beans based on classpath triggers using `@ConditionalOnClass` and `@ConditionalOnMissingBean`.",
+        "• **Resilience & Circuit Breaking:** Implement circuit breakers and rate limiters (Resilience4j) to prevent cascading downstream outages.",
+        "• **Production Observability:** Comprehensive telemetry via Spring Boot Actuator, Prometheus metrics, and distributed tracing via OpenTelemetry/Micrometer."
+      ].join("\n");
+    }
+
+    // 7. Database, SQL, ACID & Indexing
+    if (p.includes("acid") || p.includes("index") || p.includes("database") || p.includes("sql") || p.includes("transaction")) {
+      return [
+        "⭐ **Database Design & Performance Principles:**",
+        "",
+        "• **ACID Guarantees:** **Atomicity** (Write-Ahead Logging / all-or-nothing), **Consistency** (schema invariants and foreign keys), **Isolation** (MVCC snapshots and locking levels), **Durability** (fsync to persistent disk).",
+        "• **Indexing Strategies:** B+ Trees for range queries, sorting, and prefix scans; Hash indexes for exact key lookups. Create composite indexes ordered by cardinality.",
+        "• **Scale & Sharding:** Read replicas for read scaling; horizontal sharding via consistent hashing or range partitions for write throughput."
+      ].join("\n");
+    }
+
+    // 8. General Technical Query Fallback
     return [
-      "### 🎯 Solution & Analysis for " + candidateName,
-      "**Query:** \"" + prompt + "\"",
-      "*(Personalized using your stack: " + primaryLang + " • " + frameworksList + ")*",
-      snippet ? "\n*(Referencing captured screen problem / diagram)*" : "",
+      "⭐ **Core Engineering Analysis & Key Insights:**",
       "",
-      "#### 1. Architecture Intuition & Design Principles:",
-      "* **Engineering Approach:** Structure the solution cleanly around your production experience with **" + frameworksList + "**.",
-      "* **Complexity Focus:** Optimize the critical path for predictable time/space complexity and resilience under load.",
-      "",
-      "#### 2. Clean Implementation in " + primaryLang + ":",
-      "```" + primaryLang.toLowerCase(),
-      "// Tailored solution for: " + prompt.slice(0, 60),
-      "export function solveQuery(input: any): any {",
-      "  if (!input) return null;",
-      "",
-      "  // 1. Efficient lookup structure",
-      "  const lookup = new Map<string, any>();",
-      "",
-      "  // 2. Linear traversal with early termination",
-      "  return {",
-      "    status: 'success',",
-      "    processedBy: '" + candidateName + "',",
-      "    result: input",
-      "  };",
-      "}",
-      "```",
-      "",
-      "#### 3. Complexity & Production Considerations:",
-      "* **Time Complexity:** `O(N)` linear time.",
-      "* **Space Complexity:** `O(1)` or `O(N)` auxiliary space.",
-      "* **Production Considerations:** Handle null checks, boundary extremes, and concurrency safety."
+      "• **Fundamental Concept:** " + prompt.trim() + " is essential for building scalable, resilient production services.",
+      "• **Design & Architecture:** Structure your approach around clear separation of concerns, defensive input validation, and predictable failure isolation.",
+      "• **Trade-offs & Optimization:** Evaluate latency versus throughput, consistency versus availability (CAP theorem), and memory footprint under high concurrency.",
+      "• **Production Reliability:** Ensure end-to-end telemetry (structured logging, metrics, traces), idempotency for mutation endpoints, and graceful degradation."
     ].join("\n");
   }
 }
