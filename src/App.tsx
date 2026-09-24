@@ -6,7 +6,7 @@ import { ScreenVisionPanel } from "./components/ScreenVisionPanel";
 import { AssistantPanel } from "./components/AssistantPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ResumeModal } from "./components/ResumeModal";
-import { PrateekOverlay } from "./components/PrateekOverlay";
+import { CodingAssistant } from "./components/CodingAssistant";
 import { SpeechService } from "./services/speechService";
 import { ScreenCaptureService } from "./services/screenService";
 import { AIEngine } from "./services/aiEngine";
@@ -484,8 +484,8 @@ export default function App() {
   return (
     <>
       {viewMode === "overlay" ? (
-        /* PRATEEK AI FLOATING HUD & ANSWER CARD OVERLAY */
-        <PrateekOverlay
+        /* CODING ASSISTANT FLOATING HUD & ANSWER CARD OVERLAY */
+        <CodingAssistant
           isCapturing={isCapturing}
           activeSpeaker={activeSpeaker}
           interimText={interimText}
@@ -519,10 +519,10 @@ export default function App() {
             <button
               className="btn-overlay-mode"
               onClick={() => setViewMode("overlay")}
-              title="Return to PRATEEK AI Floating HUD"
+              title="Return to Coding Assistant Floating HUD"
             >
               <Layers size={15} />
-              <span>Switch to Prateek AI Floating HUD Mode</span>
+              <span>Switch to Coding Assistant Floating HUD Mode</span>
             </button>
           </div>
 

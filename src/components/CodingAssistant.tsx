@@ -46,7 +46,7 @@ interface Props {
 
 
 
-export const PrateekOverlay: React.FC<Props> = ({
+export const CodingAssistant: React.FC<Props> = ({
   isCapturing,
   interimText,
   transcript,
@@ -608,3 +608,7 @@ export const PrateekOverlay: React.FC<Props> = ({
     </div>
   );
 };
+ 
+export const CodingAssitant = CodingAssistant;
+export const PrateekOverlay = CodingAssistant;
+export default CodingAssistant;
