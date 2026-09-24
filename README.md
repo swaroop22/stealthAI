@@ -79,7 +79,7 @@ The output `.dmg` installer will be located in the `release/` folder. Double-cli
 ```bash
 npm run electron:build:win
 ```
-The output `StealthAI Setup 1.0.0.exe` and portable `.exe` will be located in the `release/` folder.
+The output `StealthAI Setup 2.0.0.exe` and portable `.exe` will be located in the `release/` folder.
 
 #### Build All:
 ```bash
