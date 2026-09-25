@@ -60,12 +60,13 @@ function formatAsQuestion(q: string): string {
   // Capitalize first letter
   cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
 
-  // If ends with a period or comma, replace with question mark if question starter
-  if (cleaned.endsWith(".") || cleaned.endsWith(",")) {
+  // If ends with a comma, strip it
+  if (cleaned.endsWith(",")) {
     cleaned = cleaned.slice(0, -1).trim();
   }
 
-  if (!cleaned.endsWith("?") && !cleaned.endsWith("!")) {
+  // If it doesn't end with punctuation, append a question mark
+  if (!cleaned.endsWith("?") && !cleaned.endsWith(".") && !cleaned.endsWith("!")) {
     cleaned = cleaned + "?";
   }
 
@@ -74,8 +75,8 @@ function formatAsQuestion(q: string): string {
 
 /**
  * Extracts the last question asked from the speech transcript (from the end backwards).
- * Specifically examines the end of speech, skipping pleasantries and trailing fillers,
- * to guarantee that clicking 'Answer' grabs the most recent question spoken.
+ * Preserves the full conversational problem context so that questions like
+ * "In Databricks, how do you handle shuffle spill?" do NOT lose their setup.
  */
 export function extractLastQuestionFromSpeech(
   transcript: TranscriptItem[],
@@ -115,43 +116,50 @@ export function extractLastQuestionFromSpeech(
     return { question: "", fullTranscriptText };
   }
 
-  // 1. First pass: Examine turns from the END backwards for explicit questions
+  // 1. First pass: Examine turns from the END backwards for explicit questions or prompts
   for (const turn of tailTurns) {
     const raw = turn.text.trim();
     if (!raw || isStandaloneFiller(raw)) continue;
 
-    // Split turn into individual sentences/clauses
-    const sentences = raw.match(/[^.!?\n]+[.!?\n]*/g) || [raw];
+    const cleanedTurn = cleanTrailingFillers(raw);
+    const hasQuestionMark = cleanedTurn.includes("?");
+    const hasQuestionStarter = QUESTION_STARTER_REGEX.test(cleanedTurn);
 
-    // Scan sentences in this turn from the end backwards
-    for (let sIdx = sentences.length - 1; sIdx >= 0; sIdx--) {
-      let sentence = sentences[sIdx].trim();
-      if (!sentence || isStandaloneFiller(sentence)) continue;
-
-      // Check if sentence ends with '?'
-      if (sentence.includes("?")) {
-        // If there are multiple clauses, extract from the question starter or question clause
-        const match = sentence.search(QUESTION_STARTER_REGEX);
-        const questionPart = match !== -1 ? sentence.slice(match) : sentence;
+    // If the turn contains a question or starter:
+    if (hasQuestionMark || hasQuestionStarter) {
+      // If the turn is a cohesive utterance under 400 characters, KEEP THE WHOLE TURN
+      // to preserve problem setup, context, and technology references!
+      if (cleanedTurn.length <= 400) {
         return {
-          question: formatAsQuestion(questionPart),
+          question: formatAsQuestion(cleanedTurn),
           sourceSpeaker: turn.speaker,
           timestamp: turn.timestamp,
           fullTranscriptText
         };
       }
 
-      // Check if sentence starts with or contains a question starter pattern
-      const match = sentence.search(QUESTION_STARTER_REGEX);
-      if (match !== -1) {
-        // Extract from question starter to end of sentence
-        const questionPart = sentence.slice(match);
-        return {
-          question: formatAsQuestion(questionPart),
-          sourceSpeaker: turn.speaker,
-          timestamp: turn.timestamp,
-          fullTranscriptText
-        };
+      // If the turn is very long, extract the question sentence and its preceding context sentence
+      const sentences = cleanedTurn.match(/[^.!?\n]+[.!?\n]*/g) || [cleanedTurn];
+      for (let sIdx = sentences.length - 1; sIdx >= 0; sIdx--) {
+        const sentence = sentences[sIdx].trim();
+        if (!sentence || isStandaloneFiller(sentence)) continue;
+
+        if (sentence.includes("?") || QUESTION_STARTER_REGEX.test(sentence)) {
+          // If there is an immediate preceding sentence that sets the context, include it
+          let combined = sentence;
+          if (sIdx > 0) {
+            const prev = sentences[sIdx - 1].trim();
+            if (prev.length > 5 && !isStandaloneFiller(prev)) {
+              combined = `${prev} ${sentence}`;
+            }
+          }
+          return {
+            question: formatAsQuestion(combined),
+            sourceSpeaker: turn.speaker,
+            timestamp: turn.timestamp,
+            fullTranscriptText
+          };
+        }
       }
     }
   }
@@ -161,21 +169,15 @@ export function extractLastQuestionFromSpeech(
     const raw = turn.text.trim();
     if (!raw || isStandaloneFiller(raw)) continue;
 
-    const sentences = raw.match(/[^.!?\n]+[.!?\n]*/g) || [raw];
-    for (let sIdx = sentences.length - 1; sIdx >= 0; sIdx--) {
-      const sentence = sentences[sIdx].trim();
-      if (!sentence || isStandaloneFiller(sentence)) continue;
-
-      const words = sentence.split(/\s+/).filter(Boolean);
-      // If it has at least 3 words and isn't just filler
-      if (words.length >= 3) {
-        return {
-          question: cleanTrailingFillers(sentence),
-          sourceSpeaker: turn.speaker,
-          timestamp: turn.timestamp,
-          fullTranscriptText
-        };
-      }
+    const cleaned = cleanTrailingFillers(raw);
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    if (words.length >= 3) {
+      return {
+        question: formatAsQuestion(cleaned),
+        sourceSpeaker: turn.speaker,
+        timestamp: turn.timestamp,
+        fullTranscriptText
+      };
     }
   }
 

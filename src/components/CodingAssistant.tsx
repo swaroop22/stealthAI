@@ -53,6 +53,7 @@ export const CodingAssistant: React.FC<Props> = ({
   activeResponse,
   responseHistory,
   activeSnippet,
+  apiKey,
   onToggleCapture,
   onCaptureScreenshot,
   onTriggerAnswer,
@@ -554,6 +555,21 @@ export const CodingAssistant: React.FC<Props> = ({
                         {copiedQuestion ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
                       </button>
                     </div>
+
+                    {(!apiKey || apiKey.trim().length < 15) && (
+                      <div className="offline-key-alert">
+                        <span>⚠️ Offline template mode. Add your free Gemini key in <strong>Settings (⚙️)</strong> for live AI answers.</span>
+                        <button
+                          className="offline-settings-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenSettings();
+                          }}
+                        >
+                          Add Key
+                        </button>
+                      </div>
+                    )}
 
                     {/* Answer Main Content */}
                     <div className="answer-main-content">

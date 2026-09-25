@@ -166,86 +166,90 @@ export default function App() {
   };
 
   // Assistant generator
-  const triggerGeneration = useCallback((promptText: string, modeOverride?: AssistantMode) => {
-    if (!promptText || promptText.trim().length === 0) return;
-    const cleanPrompt = promptText.trim();
-    const mode = modeOverride || detectMode(cleanPrompt, activeMode);
-    setActiveMode(mode);
+  const triggerGeneration = useCallback(
+    (promptText: string, modeOverride?: AssistantMode, contextText?: string) => {
+      if (!promptText || promptText.trim().length === 0) return;
+      const cleanPrompt = promptText.trim();
+      const mode = modeOverride || detectMode(cleanPrompt, activeMode);
+      setActiveMode(mode);
 
-    const responseId = crypto.randomUUID();
-    const timestamp = new Intl.DateTimeFormat("en-US", {
-      hour: "2-digit",
-      minute: "2-digit"
-    }).format(new Date());
+      const responseId = crypto.randomUUID();
+      const timestamp = new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date());
 
-    const newResponse: AIResponse = {
-      id: responseId,
-      mode,
-      timestamp,
-      prompt: cleanPrompt,
-      content: "",
-      isStreaming: true,
-      tokensGenerated: 0
-    };
+      const newResponse: AIResponse = {
+        id: responseId,
+        mode,
+        timestamp,
+        prompt: cleanPrompt,
+        content: "",
+        isStreaming: true,
+        tokensGenerated: 0
+      };
 
-    // Add to history and make active
-    setResponses((prev) => [newResponse, ...prev]);
-    setActiveResponseId(responseId);
-    isGeneratingRef.current = true;
-    lastTriggerTimeRef.current = Date.now();
+      // Add to history and make active
+      setResponses((prev) => [newResponse, ...prev]);
+      setActiveResponseId(responseId);
+      isGeneratingRef.current = true;
+      lastTriggerTimeRef.current = Date.now();
 
-    AIEngine.generateStreamingResponse(
-      cleanPrompt,
-      mode,
-      profile,
-      activeSnippet,
-      consent.localOnlyMode ? "" : apiKey,
-      {
-        onToken: (_token, accumulated) => {
-          setResponses((prev) =>
-            prev.map((r) =>
-              r.id === responseId
-                ? {
-                    ...r,
-                    content: accumulated,
-                    tokensGenerated: r.tokensGenerated + 1
-                  }
-                : r
-            )
-          );
+      AIEngine.generateStreamingResponse(
+        cleanPrompt,
+        mode,
+        profile,
+        activeSnippet,
+        consent.localOnlyMode ? "" : apiKey,
+        {
+          onToken: (_token, accumulated) => {
+            setResponses((prev) =>
+              prev.map((r) =>
+                r.id === responseId
+                  ? {
+                      ...r,
+                      content: accumulated,
+                      tokensGenerated: r.tokensGenerated + 1
+                    }
+                  : r
+              )
+            );
+          },
+          onComplete: (finalText) => {
+            isGeneratingRef.current = false;
+            setResponses((prev) =>
+              prev.map((r) =>
+                r.id === responseId
+                  ? {
+                      ...r,
+                      content: finalText,
+                      isStreaming: false
+                    }
+                  : r
+              )
+            );
+            showToast("AI solution ready", "success");
+          },
+          onError: (err) => {
+            isGeneratingRef.current = false;
+            showToast(err, "error");
+            setResponses((prev) =>
+              prev.map((r) =>
+                r.id === responseId
+                  ? {
+                      ...r,
+                      isStreaming: false
+                    }
+                  : r
+              )
+            );
+          }
         },
-        onComplete: (finalText) => {
-          isGeneratingRef.current = false;
-          setResponses((prev) =>
-            prev.map((r) =>
-              r.id === responseId
-                ? {
-                    ...r,
-                    content: finalText,
-                    isStreaming: false
-                  }
-                : r
-            )
-          );
-          showToast("AI solution ready", "success");
-        },
-        onError: (err) => {
-          isGeneratingRef.current = false;
-          showToast(err, "error");
-          setResponses((prev) =>
-            prev.map((r) =>
-              r.id === responseId
-                ? {
-                    ...r,
-                    isStreaming: false
-                  }
-                : r
-            )
-          );
-        }
-      }
-    );
-  }, [activeMode, profile, activeSnippet, consent.localOnlyMode, apiKey]);
+        contextText
+      );
+    },
+    [activeMode, profile, activeSnippet, consent.localOnlyMode, apiKey]
+  );
 
   // Keep ref up to date
   useEffect(() => {
@@ -318,7 +322,7 @@ export default function App() {
     const extracted = extractLastQuestionFromSpeech(transcript, interimText);
     if (extracted.question && extracted.question.trim().length > 2) {
       showToast(`Answering: "${extracted.question.slice(0, 42)}..."`, "info");
-      triggerGeneration(extracted.question.trim());
+      triggerGeneration(extracted.question.trim(), undefined, extracted.fullTranscriptText);
       return;
     }
 

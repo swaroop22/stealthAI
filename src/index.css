@@ -3765,6 +3765,38 @@ pre {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.offline-key-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 6px;
+  padding: 4px 10px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  color: #fbbf24;
+}
+
+.offline-settings-btn {
+  background: rgba(245, 158, 11, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #ffffff;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.offline-settings-btn:hover {
+  background: rgba(245, 158, 11, 0.4);
+  color: #fff;
+}
+
 .answer-main-content {
   font-size: 14.5px;
   line-height: 1.55;
