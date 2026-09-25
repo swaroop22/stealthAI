@@ -9,12 +9,10 @@
 @property (nonatomic, strong) SFSpeechRecognitionTask *currentTask;
 @property (nonatomic, strong) NSMutableArray<AVAudioPCMBuffer *> *pendingBuffers;
 @property (nonatomic, assign) BOOL isRunning;
-@property (nonatomic, assign) BOOL isTransitioning;
+@property (nonatomic, assign) uint64_t currentTaskId;
 @property (nonatomic, strong) NSString *lastEmittedInterim;
 @property (nonatomic, assign) NSUInteger committedLength;
 @property (nonatomic, strong) NSTimer *silenceTimer;
-@property (nonatomic, strong) NSTimer *taskRollingTimer;
-@property (nonatomic, strong) NSTimer *healthWatchdogTimer;
 @property (nonatomic, strong) NSDate *taskStartTime;
 @end
 
@@ -31,7 +29,7 @@ static StealthSpeechEngine *globalEngine = nil;
         self.audioEngine = [[AVAudioEngine alloc] init];
         self.pendingBuffers = [NSMutableArray array];
         self.isRunning = NO;
-        self.isTransitioning = NO;
+        self.currentTaskId = 0;
         self.lastEmittedInterim = @"";
         self.committedLength = 0;
     }
@@ -53,31 +51,6 @@ static StealthSpeechEngine *globalEngine = nil;
 
     [self emitJSON:@{@"type": @"status", @"message": @"starting"}];
     [self setupAndStartAudio];
-    [self startWatchdogs];
-}
-
-- (void)startWatchdogs {
-    [self.healthWatchdogTimer invalidate];
-    __weak typeof(self) weakSelf = self;
-    self.healthWatchdogTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || !strongSelf.isRunning) return;
-
-        // Verify audio engine is active
-        if (!strongSelf.audioEngine.isRunning) {
-            NSError *err = nil;
-            [strongSelf.audioEngine startAndReturnError:&err];
-        }
-
-        // If not transitioning and current task has terminated or is nil, refresh immediately
-        if (!strongSelf.isTransitioning) {
-            if (!strongSelf.currentTask ||
-                strongSelf.currentTask.state == SFSpeechRecognitionTaskStateCompleted ||
-                strongSelf.currentTask.state == SFSpeechRecognitionTaskStateCanceling) {
-                [strongSelf refreshTaskCleanly];
-            }
-        }
-    }];
 }
 
 - (void)setupAndStartAudio {
@@ -93,11 +66,11 @@ static StealthSpeechEngine *globalEngine = nil;
             if (!strongSelf || !strongSelf.isRunning) return;
 
             @synchronized (strongSelf) {
-                if (strongSelf.currentRequest && !strongSelf.isTransitioning) {
+                if (strongSelf.currentRequest) {
                     [strongSelf.currentRequest appendAudioPCMBuffer:buffer];
                 } else {
-                    // Buffer incoming audio during task rollover so not a single syllable is missed
-                    if (strongSelf.pendingBuffers.count < 120) {
+                    // Buffer incoming audio during brief task rollover so 0 samples are dropped
+                    if (strongSelf.pendingBuffers.count < 100) {
                         [strongSelf.pendingBuffers addObject:buffer];
                     }
                 }
@@ -121,13 +94,11 @@ static StealthSpeechEngine *globalEngine = nil;
 - (void)startNewRecognitionTask {
     if (!self.isRunning) return;
 
-    self.isTransitioning = YES;
+    // Increment task identifier so all callbacks from older tasks are immediately discarded
+    uint64_t thisTaskId = ++self.currentTaskId;
 
     [self.silenceTimer invalidate];
     self.silenceTimer = nil;
-
-    [self.taskRollingTimer invalidate];
-    self.taskRollingTimer = nil;
 
     // Clean up old task safely
     if (self.currentTask) {
@@ -152,7 +123,7 @@ static StealthSpeechEngine *globalEngine = nil;
     newRequest.shouldReportPartialResults = YES;
     newRequest.taskHint = SFSpeechRecognitionTaskHintDictation;
 
-    // On-Device recognition gives zero network latency and avoids Apple cloud session limits
+    // On-Device recognition on Apple Silicon provides local processing with no network timeouts
     if (@available(macOS 10.15, *)) {
         if (self.recognizer.supportsOnDeviceRecognition) {
             newRequest.requiresOnDeviceRecognition = YES;
@@ -163,7 +134,7 @@ static StealthSpeechEngine *globalEngine = nil;
         newRequest.addsPunctuation = YES;
     }
 
-    // Technical interview context keywords for maximum speech accuracy
+    // Contextual tech interview vocabulary
     newRequest.contextualStrings = @[
         @"API", @"HTTP", @"HTTPS", @"TCP", @"UDP", @"DNS", @"Postgres", @"PostgreSQL",
         @"Redis", @"Kafka", @"Docker", @"Kubernetes", @"AWS", @"GCP", @"Azure",
@@ -176,7 +147,7 @@ static StealthSpeechEngine *globalEngine = nil;
 
     @synchronized (self) {
         self.currentRequest = newRequest;
-        // Re-inject audio buffered during the brief transition
+        // Inject any audio buffered during this ~10ms task swap
         for (AVAudioPCMBuffer *buf in self.pendingBuffers) {
             [newRequest appendAudioPCMBuffer:buf];
         }
@@ -184,29 +155,15 @@ static StealthSpeechEngine *globalEngine = nil;
     }
 
     __weak typeof(self) weakSelf = self;
-
-    // Proactive continuous speech rollover: Apple tasks perform best in rolling ~20s windows.
-    // If the user talks continuously without pause for 20s, cleanly finalize turn and roll over.
-    self.taskRollingTimer = [NSTimer scheduledTimerWithTimeInterval:20.0 repeats:NO block:^(NSTimer * _Nonnull timer) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || !strongSelf.isRunning) return;
-
-        NSString *finalText = [strongSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (finalText.length > 0) {
-            [strongSelf emitJSON:@{
-                @"type": @"final",
-                @"text": finalText
-            }];
-            strongSelf.lastEmittedInterim = @"";
-        }
-        [strongSelf refreshTaskCleanly];
-    }];
-
     self.currentTask = [self.recognizer recognitionTaskWithRequest:newRequest resultHandler:^(SFSpeechRecognitionResult * _Nullable result, NSError * _Nullable taskError) {
-        // Dispatch to main thread immediately so timers and runloop stay 100% in sync
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || !strongSelf.isRunning) return;
+
+            // Reject any events from previous tasks
+            if (strongSelf.currentTaskId != thisTaskId) {
+                return;
+            }
 
             if (result) {
                 NSString *fullTranscript = result.bestTranscription.formattedString;
@@ -228,11 +185,11 @@ static StealthSpeechEngine *globalEngine = nil;
                             @"text": turnText
                         }];
 
-                        // Natural pause: finalize turn after 1.5s of silence on main runloop
+                        // Natural pause: finalize turn after 1.4s of silence on main runloop
                         [strongSelf.silenceTimer invalidate];
-                        strongSelf.silenceTimer = [NSTimer scheduledTimerWithTimeInterval:1.5 repeats:NO block:^(NSTimer * _Nonnull timer) {
+                        strongSelf.silenceTimer = [NSTimer scheduledTimerWithTimeInterval:1.4 repeats:NO block:^(NSTimer * _Nonnull timer) {
                             __strong typeof(weakSelf) sSelf = weakSelf;
-                            if (!sSelf || !sSelf.isRunning) return;
+                            if (!sSelf || !sSelf.isRunning || sSelf.currentTaskId != thisTaskId) return;
 
                             NSString *finalText = [sSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                             if (finalText.length > 0) {
@@ -240,11 +197,15 @@ static StealthSpeechEngine *globalEngine = nil;
                                     @"type": @"final",
                                     @"text": finalText
                                 }];
+                                sSelf.committedLength = fullTranscript.length;
                                 sSelf.lastEmittedInterim = @"";
                             }
 
-                            // Clean rollover during natural conversational pause so buffers never overflow
-                            [sSelf refreshTaskCleanly];
+                            // If this task has been running for > 45 seconds, refresh cleanly during this pause
+                            NSTimeInterval elapsed = [[NSDate date] timeIntervalSinceDate:sSelf.taskStartTime];
+                            if (elapsed >= 45.0) {
+                                [sSelf refreshTaskCleanly];
+                            }
                         }];
                     }
                 }
@@ -264,48 +225,44 @@ static StealthSpeechEngine *globalEngine = nil;
                 }
             }
 
-            // If task ended with an error while running (including Apple internal cancellation code 216, timeout, etc.)
-            if (taskError && strongSelf.isRunning && !strongSelf.isTransitioning) {
-                NSString *finalText = [strongSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                if (finalText.length > 0) {
-                    [strongSelf emitJSON:@{
-                        @"type": @"final",
-                        @"text": finalText
-                    }];
-                    strongSelf.lastEmittedInterim = @"";
+            // Real error from the current active task (ignoring normal cancel error 216)
+            if (taskError && strongSelf.isRunning && strongSelf.currentTaskId == thisTaskId) {
+                if (taskError.code != 216) {
+                    NSString *finalText = [strongSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    if (finalText.length > 0) {
+                        [strongSelf emitJSON:@{
+                            @"type": @"final",
+                            @"text": finalText
+                        }];
+                        strongSelf.lastEmittedInterim = @"";
+                    }
+                    // Auto-recover after unexpected error
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                        if (strongSelf.isRunning && strongSelf.currentTaskId == thisTaskId) {
+                            [strongSelf refreshTaskCleanly];
+                        }
+                    });
                 }
-                [strongSelf refreshTaskCleanly];
             }
         });
     }];
-
-    self.isTransitioning = NO;
 }
 
 - (void)refreshTaskCleanly {
-    if (!self.isRunning || self.isTransitioning) return;
-    self.isTransitioning = YES;
+    if (!self.isRunning) return;
 
-    // Invalidate main thread timers
     [self.silenceTimer invalidate];
     self.silenceTimer = nil;
 
-    [self.taskRollingTimer invalidate];
-    self.taskRollingTimer = nil;
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self startNewRecognitionTask];
-    });
+    [self startNewRecognitionTask];
 }
 
 - (void)stop {
     self.isRunning = NO;
+    self.currentTaskId++;
+
     [self.silenceTimer invalidate];
     self.silenceTimer = nil;
-    [self.taskRollingTimer invalidate];
-    self.taskRollingTimer = nil;
-    [self.healthWatchdogTimer invalidate];
-    self.healthWatchdogTimer = nil;
 
     @synchronized (self) {
         if (self.currentRequest) {
