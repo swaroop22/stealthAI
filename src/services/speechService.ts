@@ -107,6 +107,15 @@ export class SpeechService {
                 this.storedOnInterim("");
               }
             }
+          } else if (data.type === "stopped") {
+            if (this.isListening && this.usingNativeSpeech) {
+              console.warn("Native speech helper stopped, auto-restarting in 400ms...");
+              setTimeout(() => {
+                if (this.isListening && this.usingNativeSpeech) {
+                  electron.startNativeSpeech();
+                }
+              }, 400);
+            }
           } else if (data.type === "error") {
             console.warn("Native speech notice:", data.message);
           }
