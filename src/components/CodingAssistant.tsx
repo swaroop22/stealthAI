@@ -103,7 +103,7 @@ export const CodingAssistant: React.FC<Props> = ({
     const electron = (window as any).electronAPI;
     if (electron?.resizeWindow) {
       if (isCardCollapsed) {
-        electron.resizeWindow(780, 75);
+        electron.resizeWindow(840, 75);
       } else {
         electron.resizeWindow(920, 520);
       }
