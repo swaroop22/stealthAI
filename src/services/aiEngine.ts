@@ -18,12 +18,11 @@ export class AIEngine {
 
   // Active Gemini models supported by Google Generative AI API
   private static readonly FLASH_MODELS = [
-    "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro",
-    "gemini-2.0-flash-lite"
+    "gemini-3.5-flash",
+    "gemini-3.7-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.8-flash"
   ];
 
   public static async generateStreamingResponse(
@@ -138,7 +137,7 @@ export class AIEngine {
     // Inject recent transcript context so the model understands the conversational setup
     if (transcriptContext && transcriptContext.trim().length > 0) {
       userParts.push({
-        text: `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
+        text: `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
       });
     } else {
       userParts.push({ text: prompt });
@@ -282,7 +281,7 @@ export class AIEngine {
       accumulated += piece;
       callbacks.onToken(piece, accumulated);
 
-      const delay = piece === "\n" ? 18 : piece.length > 5 ? 8 : 4;
+      const delay = piece === "\n" ? 16 : piece.length > 5 ? 7 : 3;
       await new Promise((r) => setTimeout(r, delay));
     }
 
@@ -332,7 +331,212 @@ export class AIEngine {
     const languagesList = profile.primaryLanguages?.join(", ") || "Python, SQL, PySpark";
     const frameworksList = profile.frameworks?.slice(0, 6).join(", ") || "Databricks, Apache Spark, Kafka, Snowflake, AWS, dbt";
 
-    // 0. Apache Spark / PySpark / Databricks
+    // 1. DATA STRUCTURES & ALGORITHMS
+
+    // Binary Tree / Binary Search Tree (BST)
+    if (p.includes("binary tree") || p.includes("bst") || (p.includes("tree") && (p.includes("travers") || p.includes("invert") || p.includes("height") || p.includes("leaf") || p.includes("node") || p.includes("balance")))) {
+      return [
+        "⭐ **Binary Tree & Binary Search Tree (BST) — Core Concepts:**",
+        "",
+        "• **Definition:** A hierarchical tree structure where each node has at most two children (`left` and `right`). In a **BST**, all nodes in the left subtree have values `< root`, and all in the right subtree have values `> root`.",
+        "• **Traversals:**",
+        "  - **In-Order (Left, Root, Right):** Visits BST nodes in strictly sorted ascending order.",
+        "  - **Pre-Order (Root, Left, Right):** Ideal for cloning or serializing tree structure.",
+        "  - **Post-Order (Left, Right, Root):** Bottom-up evaluation, ideal for deletion or height calculation.",
+        "  - **Level-Order (BFS):** Uses a FIFO queue to visit nodes level-by-level.",
+        "• **Time Complexity:** Average search/insert/delete is `O(log N)` for balanced trees (AVL/Red-Black); degenerates to `O(N)` for skewed trees.",
+        "• **Space Complexity:** `O(H)` where `H` is tree height (recursion stack frames)."
+      ].join("\n");
+    }
+
+    // Linked List & Reversal
+    if (p.includes("linked list") || (p.includes("reverse") && p.includes("list")) || p.includes("cycle detection")) {
+      return [
+        "⭐ **Linked List — Architecture & Key Operations:**",
+        "",
+        "• **Structure:** Linear collection of nodes where each node contains data and a reference (`next` pointer, and `prev` in doubly linked lists).",
+        "• **Reversal Algorithm (3 Pointers):**",
+        "  - Maintain `prev = null`, `curr = head`, `next = null`.",
+        "  - Loop: `next = curr.next; curr.next = prev; prev = curr; curr = next;`.",
+        "  - **Complexity:** `O(N)` time complexity, `O(1)` space complexity.",
+        "• **Cycle Detection (Floyd's Tortoise & Hare):**",
+        "  - Fast pointer advances 2 steps while slow pointer advances 1 step. If they meet, a cycle exists.",
+        "• **Trade-offs vs Array:** Linked lists allow `O(1)` prepend/insert given a pointer, but lack random access (`O(N)` lookup) and have poor CPU cache locality."
+      ].join("\n");
+    }
+
+    // Hash Map / Hash Table
+    if (p.includes("hash map") || p.includes("hash table") || p.includes("hashmap") || (p.includes("hash") && (p.includes("collision") || p.includes("lookup")))) {
+      return [
+        "⭐ **Hash Map & Hash Table Internals:**",
+        "",
+        "• **Core Mechanism:** Maps keys to bucket array indices using a hash function: `index = hash(key) % array_capacity`.",
+        "• **Collision Resolution Strategies:**",
+        "  - **Separate Chaining:** Each bucket holds a linked list (or balanced BST like Red-Black tree in Java 8+ when bucket size > 8).",
+        "  - **Open Addressing (Linear/Quadratic Probing):** Searches for the next open slot directly in the array upon collision.",
+        "• **Time Complexity:** Average `O(1)` for search, insert, and delete; worst-case `O(N)` when all keys collide into a single bucket.",
+        "• **Load Factor & Rehashing:** When entries / capacity exceeds threshold (typically 0.75), capacity doubles and all keys are rehashed."
+      ].join("\n");
+    }
+
+    // Two Sum / Arrays & Hashing
+    if (p.includes("two sum") || (p.includes("array") && p.includes("sum"))) {
+      return [
+        "⭐ **Two Sum — Optimal Algorithm:**",
+        "",
+        "• **Problem:** Find indices of two numbers that add up to a target value.",
+        "• **Optimal Approach (One-Pass Hash Map):**",
+        "  - Iterate through array while checking if `target - num` exists in the hash map.",
+        "  - If found, return `[map.get(target - num), currentIndex]`.",
+        "  - Otherwise, insert `num -> currentIndex` into the map.",
+        "• **Complexity:** **`O(N)` Time Complexity** (single pass) • **`O(N)` Space Complexity** (hash map storage)."
+      ].join("\n");
+    }
+
+    // Binary Search
+    if (p.includes("binary search")) {
+      return [
+        "⭐ **Binary Search — Principles & Complexity:**",
+        "",
+        "• **Prerequisite:** Input array must be sorted in ascending or monotonic order.",
+        "• **Algorithm:** Repeatedly bisect search range by comparing target with middle element.",
+        "• **Mid Calculation:** Use `mid = left + Math.floor((right - left) / 2)` to eliminate integer overflow.",
+        "• **Complexity:** **`O(log N)` Time Complexity** • **`O(1)` Space Complexity**."
+      ].join("\n");
+    }
+
+    // 2. OBJECT-ORIENTED PROGRAMMING (OOP) & DESIGN PATTERNS
+
+    // Polymorphism
+    if (p.includes("polymorphism")) {
+      return [
+        "⭐ **Polymorphism in Object-Oriented Programming:**",
+        "",
+        "• **Definition:** The ability of different objects to respond to the same message/method call in their own class-specific manner.",
+        "• **Compile-Time Polymorphism (Static / Overloading):**",
+        "  - Multiple methods in the same class share the same name but have different parameter signatures.",
+        "  - Resolved at compile time by the compiler.",
+        "• **Runtime Polymorphism (Dynamic / Overriding):**",
+        "  - A subclass provides a specific implementation of a method defined in its superclass or interface.",
+        "  - Resolved dynamically at runtime via **Virtual Method Table (vtable)** dispatch.",
+        "• **Key Benefit:** Loose coupling — caller code interacts with high-level interfaces without knowing concrete underlying implementations."
+      ].join("\n");
+    }
+
+    // OOP Pillars: Encapsulation, Abstraction, Inheritance
+    if (p.includes("oop") || p.includes("pillars") || p.includes("encapsulation") || p.includes("inheritance") || p.includes("abstraction")) {
+      return [
+        "⭐ **Core Pillars of Object-Oriented Programming (OOP):**",
+        "",
+        "• **Encapsulation:** Bundling data (state) and methods (behavior) within a class, and restricting direct access to internal components using access modifiers (`private`, `protected`).",
+        "• **Abstraction:** Hiding complex internal implementation details and exposing only a clean, simple interface to consumers.",
+        "• **Inheritance:** Enabling a new class to inherit attributes and methods from an existing class to foster reusability ('is-a' relationship). Modern design prefers composition over inheritance.",
+        "• **Polymorphism:** Allowing entities to take on multiple forms through method overriding (dynamic) and method overloading (static)."
+      ].join("\n");
+    }
+
+    // SOLID Principles
+    if (p.includes("solid")) {
+      return [
+        "⭐ **SOLID Principles — Clean Software Architecture:**",
+        "",
+        "• **S — Single Responsibility Principle (SRP):** A class should have only one reason to change, handling exactly one responsibility.",
+        "• **O — Open/Closed Principle (OCP):** Software entities should be open for extension, but closed for modification.",
+        "• **L — Liskov Substitution Principle (LSP):** Subtypes must be substitutable for their base types without altering system correctness.",
+        "• **I — Interface Segregation Principle (ISP):** Clients should not be forced to depend on interfaces they do not use (prefer small, focused interfaces).",
+        "• **D — Dependency Inversion Principle (DIP):** High-level modules should depend on abstractions (interfaces), not concrete low-level implementations."
+      ].join("\n");
+    }
+
+    // 3. NETWORKING, PROTOCOLS & DISTRIBUTED SYSTEMS
+
+    // TCP vs UDP
+    if (p.includes("tcp") || p.includes("udp")) {
+      return [
+        "⭐ **TCP vs UDP — Transport Layer Protocol Comparison:**",
+        "",
+        "• **TCP (Transmission Control Protocol):**",
+        "  - **Connection-Oriented:** Establishes connection via **3-Way Handshake (SYN -> SYN-ACK -> ACK)**.",
+        "  - **Reliability:** Guaranteed delivery through sequence numbers, acknowledgments (ACKs), and automatic retransmissions.",
+        "  - **Flow & Congestion Control:** Implements sliding window flow control and congestion avoidance algorithms.",
+        "  - **Best for:** Web (HTTP/HTTPS), databases, file transfers, financial transactions.",
+        "",
+        "• **UDP (User Datagram Protocol):**",
+        "  - **Connectionless:** Broadcasts datagrams immediately without handshake or state tracking.",
+        "  - **No Delivery Guarantees:** Packets may arrive out-of-order or drop without retransmission.",
+        "  - **Lowest Latency & Overhead:** Minimal 8-byte header overhead with zero handshake lag.",
+        "  - **Best for:** Real-time gaming, live video/audio streaming, DNS queries, VoIP."
+      ].join("\n");
+    }
+
+    // CAP Theorem
+    if (p.includes("cap theorem") || p.includes("cap")) {
+      return [
+        "⭐ **CAP Theorem — Distributed Systems Trade-off:**",
+        "",
+        "• **Core Rule:** In any asynchronous network subject to partitions, a distributed data store can guarantee at most **two out of three** properties:",
+        "  - **C — Consistency:** Every read receives the most recent write or an error.",
+        "  - **A — Availability:** Every non-failing node returns a response for every request (never errors or times out).",
+        "  - **P — Partition Tolerance:** The system continues functioning despite network packet loss or delayed messages.",
+        "• **Real-World Reality:** Network partitions (**P**) are physically inevitable. Therefore, systems must choose between:",
+        "  - **CP (Consistency + Partition Tolerance):** Rejects writes or times out during split-brain to protect data correctness (e.g. Spanner, HBase, ZooKeeper).",
+        "  - **AP (Availability + Partition Tolerance):** Continues serving reads/writes using eventual consistency, reconciliation, or CRDTs (e.g. Cassandra, DynamoDB, Couchbase)."
+      ].join("\n");
+    }
+
+    // REST vs GraphQL vs gRPC
+    if (p.includes("rest") || p.includes("graphql") || p.includes("grpc")) {
+      return [
+        "⭐ **API Architecture Comparison: REST vs GraphQL vs gRPC:**",
+        "",
+        "• **REST (Representational State Transfer):** Standard HTTP verbs (`GET`, `POST`, `PUT`, `DELETE`) with resource URIs. Highly cacheable at HTTP layer; suffers from over-fetching and under-fetching.",
+        "• **GraphQL:** Single endpoint where clients declare exact query structures. Solves over-fetching and allows multiple resource stitching in a single trip; requires complex caching and query depth protection.",
+        "• **gRPC (Google Remote Procedure Call):** Runs over HTTP/2 using Protocol Buffers binary serialization. Extremely low latency, strong type generation, and bidirectional streaming; ideal for internal microservice communication."
+      ].join("\n");
+    }
+
+    // 4. CONCURRENCY & OPERATING SYSTEMS
+
+    // Process vs Thread / Concurrency / Deadlock
+    if (p.includes("process") && p.includes("thread")) {
+      return [
+        "⭐ **Process vs Thread — Operating System Primitives:**",
+        "",
+        "• **Process:** Independent program instance with its own private address space, heap, memory descriptors, and OS handles. High context-switch cost; communication requires IPC (sockets, pipes, shared memory).",
+        "• **Thread:** Smallest unit of execution scheduled within a process. Threads share the process heap, code, and global variables, but maintain individual stacks and registers. Low context-switch cost; requires synchronization (locks) to prevent data races."
+      ].join("\n");
+    }
+
+    if (p.includes("deadlock")) {
+      return [
+        "⭐ **Deadlock — Conditions & Prevention Strategies:**",
+        "",
+        "• **Definition:** A state where two or more threads are permanently blocked, each holding a lock that the other needs.",
+        "• **4 Coffman Conditions Required for Deadlock:**",
+        "  1. **Mutual Exclusion:** Resources cannot be shared simultaneously.",
+        "  2. **Hold and Wait:** A thread holds resources while waiting for others.",
+        "  3. **No Preemption:** Resources cannot be forcibly revoked.",
+        "  4. **Circular Wait:** Closed chain of threads waiting on each other's locks.",
+        "• **Prevention:** Acquire locks in a strict global ordering, use lock timeouts (`tryLock`), or implement lock-free concurrent data structures."
+      ].join("\n");
+    }
+
+    // Garbage Collection
+    if (p.includes("garbage collect") || p.includes("gc")) {
+      return [
+        "⭐ **Garbage Collection (GC) — Memory Management:**",
+        "",
+        "• **Core Purpose:** Automatically identifies and reclaims heap memory occupied by objects that are no longer reachable from GC roots.",
+        "• **Generational Hypothesis:** Most allocated objects die young. Heap is split into:",
+        "  - **Young Generation (Eden, Survivor):** Frequently collected via fast Minor GC.",
+        "  - **Old / Tenured Generation:** Long-lived objects collected via Major / Full GC.",
+        "• **Algorithms:** Mark-Sweep (identifies live objects, frees remainder), Mark-Compact (defragments free space), Reference Counting (Python, Swift with cycle detectors)."
+      ].join("\n");
+    }
+
+    // 5. DATA ENGINEERING & CLOUD
+
+    // Apache Spark / PySpark / Databricks
     if (p.includes("spark") || p.includes("databricks") || p.includes("pyspark") || p.includes("shuffle") || p.includes("skew") || p.includes("partition")) {
       return [
         "⭐ **Apache Spark & Databricks — Core Architecture & Optimization:**",
@@ -344,7 +548,7 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 1. Apache Kafka / Event Streaming
+    // Apache Kafka
     if (p.includes("kafka") || p.includes("streaming") || p.includes("event-driven") || p.includes("consumer lag")) {
       return [
         "⭐ **Apache Kafka & Distributed Streaming Architecture:**",
@@ -356,7 +560,7 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 2. Snowflake, BigQuery & Data Warehousing
+    // Snowflake, BigQuery & Data Warehousing
     if (p.includes("snowflake") || p.includes("bigquery") || p.includes("warehouse") || p.includes("lakehouse") || p.includes("dbt")) {
       return [
         "⭐ **Cloud Data Warehousing & Modern Lakehouse (Snowflake / BigQuery / dbt):**",
@@ -368,7 +572,7 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 3. Database, SQL, Indexing & ACID
+    // Database, SQL, Indexing & ACID
     if (p.includes("acid") || p.includes("index") || p.includes("database") || p.includes("sql") || p.includes("transaction") || p.includes("join")) {
       return [
         "⭐ **Database Design, SQL Performance & Storage Engines:**",
@@ -380,8 +584,8 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 4. Docker, Kubernetes & Cloud Architecture
-    if (p.includes("docker") || p.includes("kubernetes") || p.includes("k8s") || p.includes("container") || p.includes("aws") || p.includes("gcp")) {
+    // Docker & Kubernetes
+    if (p.includes("docker") || p.includes("kubernetes") || p.includes("k8s") || p.includes("container") || p.includes("pod")) {
       return [
         "⭐ **Cloud-Native Infrastructure & Container Orchestration:**",
         "",
@@ -392,7 +596,7 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 5. Python & Programming Internals
+    // Python Internals
     if (p.includes("python") || p.includes("gil") || p.includes("multiprocessing") || p.includes("generator") || p.includes("async")) {
       return [
         "⭐ **Python Performance, Concurrency & Core Internals:**",
@@ -404,7 +608,7 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 6. Check if the question is asking for an Introduction / Resume Walkthrough / Experience
+    // Introduction / Resume Walkthrough
     const isIntroOrResume =
       p.includes("tell me about yourself") ||
       p.includes("walk me through your resume") ||
@@ -449,7 +653,7 @@ export class AIEngine {
       ].filter(Boolean).join("\n");
     }
 
-    // 7. Behavioral Questions (STAR Method strictly grounded in resume)
+    // Behavioral Questions (STAR Method)
     const isBehavioral =
       p.includes("tell me about a time") ||
       p.includes("conflict") ||
@@ -486,14 +690,17 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 8. General Technical Query
+    // 6. DYNAMIC TECHNICAL SYNTHESIS (Clean fallback without irrelevant framework dumping)
+    const cleanPrompt = prompt.trim();
     return [
-      "⭐ **Key Technical Insights & Solution Overview:**",
+      "⭐ **Technical Analysis: " + cleanPrompt + "**",
       "",
-      "• **Core Objective:** When addressing **" + prompt.trim() + "**, the focus must be on production reliability, low latency, and maintainable architecture.",
-      "• **Recommended Architecture:** Utilize **" + frameworksList + "** with decoupled compute/storage, automated retries, and comprehensive monitoring.",
-      "• **Key Trade-offs:** Balance consistency vs availability, compute cost vs query latency, and memory footprint under high concurrency.",
-      "• **Best Practices:** Implement structured logging, automated unit and integration tests, and defensive schema validation."
+      "• **Core Principle & Definition:** In software and data engineering, **" + cleanPrompt + "** is evaluated based on its computational complexity, operational trade-offs, and failure recovery characteristics.",
+      "• **Working Mechanism:** Focus on state management, data isolation boundaries, and how requests/records transition between components under load.",
+      "• **Production Trade-offs:**",
+      "  - **Latency vs Throughput:** Tuning batch sizes and buffer limits to achieve optimal throughput without spiking tail p99 response times.",
+      "  - **Consistency vs Availability:** Ensuring idempotent mutations and state recovery during unexpected component crashes.",
+      "• **Interview Recommendation:** Anchor your answer around real-world scale, monitoring telemetry (metrics, traces, error rates), and automated testing."
     ].join("\n");
   }
 }

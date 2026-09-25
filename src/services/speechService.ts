@@ -75,7 +75,46 @@ export class SpeechService {
     this.storedOnInterim = onInterim;
     this.storedOnError = onError;
 
-    // 1. Try Native macOS On-Device Speech Recognizer via Electron API first (0ms delay, word-by-word streaming)
+    // 1. Initialize microphone stream for audio visualizer & VAD recording fallback
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        if (!this.mediaStream) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+          this.mediaStream = stream;
+
+          // Initialize AudioContext analyser for audio visualizer & VAD
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+              this.audioCtx = new AudioContextClass();
+              const source = this.audioCtx.createMediaStreamSource(stream);
+              this.analyser = this.audioCtx.createAnalyser();
+              this.analyser.fftSize = 64;
+              this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+              source.connect(this.analyser);
+            }
+          } catch (e) {
+            console.warn("AudioContext analyser init:", e);
+          }
+        }
+      }
+    } catch (micErr: any) {
+      if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
+        onError("Microphone permission was denied. Please allow microphone access in system preferences.");
+        return false;
+      }
+      console.warn("getUserMedia error:", micErr);
+    }
+
+    this.isListening = true;
+
+    // 2. Try Native macOS On-Device Speech Recognizer via Electron API first (0ms delay, word-by-word streaming)
     const electron = (window as any).electronAPI;
     if (electron?.startNativeSpeech && electron?.onNativeSpeech && electron.platform === "darwin") {
       try {
@@ -118,11 +157,16 @@ export class SpeechService {
             }
           } else if (data.type === "error") {
             console.warn("Native speech notice:", data.message);
+            // Auto-fallback to Web Speech API and VAD if native speech encountered an issue
+            if (!this.webSpeechDisabled && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
+              this.createAndStartRecognition();
+              this.startWatchdog();
+            }
+            this.startVADRecording();
           }
         });
 
         electron.startNativeSpeech();
-        this.isListening = true;
         this.usingNativeSpeech = true;
         return true;
       } catch (nativeErr) {
@@ -130,46 +174,7 @@ export class SpeechService {
       }
     }
 
-    // 2. Fallback: Initialize microphone stream
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        if (!this.mediaStream) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-          this.mediaStream = stream;
-
-          // Initialize AudioContext analyser for audio visualizer & VAD
-          try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-              this.audioCtx = new AudioContextClass();
-              const source = this.audioCtx.createMediaStreamSource(stream);
-              this.analyser = this.audioCtx.createAnalyser();
-              this.analyser.fftSize = 64;
-              this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-              source.connect(this.analyser);
-            }
-          } catch (e) {
-            console.warn("AudioContext analyser init:", e);
-          }
-        }
-      }
-    } catch (micErr: any) {
-      if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
-        onError("Microphone permission was denied. Please allow microphone access in system preferences.");
-        return false;
-      }
-      console.warn("getUserMedia error:", micErr);
-    }
-
-    this.isListening = true;
-
-    // 3. Start VAD (Voice Activity Detection) recorder fallback for offline/non-Chrome
+    // 3. Fallback: Start VAD (Voice Activity Detection) recorder for offline/non-Chrome
     this.startVADRecording();
 
     // 4. If Web Speech API is supported and hasn't permanently failed with network error, attempt it

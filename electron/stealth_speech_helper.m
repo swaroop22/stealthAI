@@ -47,10 +47,35 @@ static StealthSpeechEngine *globalEngine = nil;
 
 - (void)start {
     if (self.isRunning) return;
-    self.isRunning = YES;
 
     [self emitJSON:@{@"type": @"status", @"message": @"starting"}];
-    [self setupAndStartAudio];
+
+    // Explicitly verify microphone and speech recognition authorization
+    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL micGranted) {
+        if (!micGranted) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self emitJSON:@{
+                    @"type": @"error",
+                    @"message": @"Microphone access denied. Please grant microphone access in macOS System Settings > Privacy & Security > Microphone."
+                }];
+            });
+            return;
+        }
+
+        [SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (status == SFSpeechRecognizerAuthorizationStatusAuthorized) {
+                    self.isRunning = YES;
+                    [self setupAndStartAudio];
+                } else {
+                    [self emitJSON:@{
+                        @"type": @"error",
+                        @"message": @"Speech Recognition denied. Please allow Speech Recognition in macOS System Settings > Privacy & Security > Speech Recognition."
+                    }];
+                }
+            });
+        }];
+    }];
 }
 
 - (void)setupAndStartAudio {
@@ -123,11 +148,9 @@ static StealthSpeechEngine *globalEngine = nil;
     newRequest.shouldReportPartialResults = YES;
     newRequest.taskHint = SFSpeechRecognitionTaskHintDictation;
 
-    // On-Device recognition on Apple Silicon provides local processing with no network timeouts
+    // Allow on-device with graceful system fallback
     if (@available(macOS 10.15, *)) {
-        if (self.recognizer.supportsOnDeviceRecognition) {
-            newRequest.requiresOnDeviceRecognition = YES;
-        }
+        newRequest.requiresOnDeviceRecognition = NO;
     }
 
     if (@available(macOS 13.0, *)) {
@@ -168,15 +191,7 @@ static StealthSpeechEngine *globalEngine = nil;
             if (result) {
                 NSString *fullTranscript = result.bestTranscription.formattedString;
                 if (fullTranscript.length > 0) {
-                    NSString *turnText = @"";
-                    if (fullTranscript.length > strongSelf.committedLength) {
-                        turnText = [fullTranscript substringFromIndex:strongSelf.committedLength];
-                        NSCharacterSet *trimSet = [NSCharacterSet characterSetWithCharactersInString:@" \t\r\n.,!?;:-"];
-                        turnText = [turnText stringByTrimmingCharactersInSet:trimSet];
-                    } else if (fullTranscript.length < strongSelf.committedLength) {
-                        strongSelf.committedLength = 0;
-                        turnText = fullTranscript;
-                    }
+                    NSString *turnText = [fullTranscript stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
                     if (turnText.length > 0) {
                         strongSelf.lastEmittedInterim = turnText;
@@ -185,9 +200,21 @@ static StealthSpeechEngine *globalEngine = nil;
                             @"text": turnText
                         }];
 
-                        // Natural pause: finalize turn after 1.4s of silence on main runloop
+                        // Continuous speaking guard: If user talks unbroken for > 20s, commit and refresh
+                        NSTimeInterval elapsed = [[NSDate date] timeIntervalSinceDate:strongSelf.taskStartTime];
+                        if (elapsed >= 20.0) {
+                            [strongSelf emitJSON:@{
+                                @"type": @"final",
+                                @"text": turnText
+                            }];
+                            strongSelf.lastEmittedInterim = @"";
+                            [strongSelf refreshTaskCleanly];
+                            return;
+                        }
+
+                        // Natural conversational pause: finalize turn after 1.2s of silence
                         [strongSelf.silenceTimer invalidate];
-                        strongSelf.silenceTimer = [NSTimer scheduledTimerWithTimeInterval:1.4 repeats:NO block:^(NSTimer * _Nonnull timer) {
+                        strongSelf.silenceTimer = [NSTimer scheduledTimerWithTimeInterval:1.2 repeats:NO block:^(NSTimer * _Nonnull timer) {
                             __strong typeof(weakSelf) sSelf = weakSelf;
                             if (!sSelf || !sSelf.isRunning || sSelf.currentTaskId != thisTaskId) return;
 
@@ -197,15 +224,11 @@ static StealthSpeechEngine *globalEngine = nil;
                                     @"type": @"final",
                                     @"text": finalText
                                 }];
-                                sSelf.committedLength = fullTranscript.length;
                                 sSelf.lastEmittedInterim = @"";
                             }
 
-                            // If this task has been running for > 45 seconds, refresh cleanly during this pause
-                            NSTimeInterval elapsed = [[NSDate date] timeIntervalSinceDate:sSelf.taskStartTime];
-                            if (elapsed >= 45.0) {
-                                [sSelf refreshTaskCleanly];
-                            }
+                            // Refresh task cleanly between utterances to guarantee infinite continuous listening
+                            [sSelf refreshTaskCleanly];
                         }];
                     }
                 }
@@ -237,7 +260,7 @@ static StealthSpeechEngine *globalEngine = nil;
                         strongSelf.lastEmittedInterim = @"";
                     }
                     // Auto-recover after unexpected error
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(300 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                         if (strongSelf.isRunning && strongSelf.currentTaskId == thisTaskId) {
                             [strongSelf refreshTaskCleanly];
                         }
