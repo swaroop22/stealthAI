@@ -53,14 +53,27 @@ export default function App() {
 
   const [consent, setConsent] = useState<ConsentAudit>(() => {
     const saved = localStorage.getItem("stealthai_consent");
-    return saved
-      ? JSON.parse(saved)
-      : {
+    const hasKey = Boolean(localStorage.getItem("stealthai_gemini_key"));
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const sanitized = {
+          ...parsed,
           granted: true,
-          timestamp: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-          participantNoticeAcknowledged: true,
-          localOnlyMode: false
+          localOnlyMode: hasKey ? false : Boolean(parsed.localOnlyMode)
         };
+        localStorage.setItem("stealthai_consent", JSON.stringify(sanitized));
+        return sanitized;
+      } catch (e) {}
+    }
+    const def = {
+      granted: true,
+      timestamp: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
+      participantNoticeAcknowledged: true,
+      localOnlyMode: false
+    };
+    localStorage.setItem("stealthai_consent", JSON.stringify(def));
+    return def;
   });
 
   const [profile, setProfile] = useState<CandidateProfile>(() => {
@@ -191,7 +204,7 @@ export default function App() {
         mode,
         profile,
         activeSnippet,
-        consent.localOnlyMode ? "" : apiKey,
+        apiKey && apiKey.trim().length > 15 ? apiKey.trim() : "",
         {
           onToken: (_token, accumulated) => {
             setResponses((prev) =>

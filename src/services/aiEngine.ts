@@ -16,12 +16,11 @@ export class AIEngine {
     }
   }
 
-  // Active Gemini models supported by Google Generative AI API
   private static readonly FLASH_MODELS = [
-    "gemini-3.5-flash",
-    "gemini-3.7-flash",
     "gemini-3.1-flash-lite",
     "gemini-flash-lite-latest",
+    "gemini-3.5-flash",
+    "gemini-3.7-flash",
     "gemini-3.8-flash"
   ];
 
@@ -186,34 +185,42 @@ export class AIEngine {
 
         const decoder = new TextDecoder();
         let accumulated = "";
+        let lineBuffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          lineBuffer += decoder.decode(value, { stream: true });
+          const lines = lineBuffer.split("\n");
+          lineBuffer = lines.pop() || "";
+
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("data: ")) {
               try {
-                const jsonStr = line.slice(6);
-                if (jsonStr.trim() === "[DONE]") continue;
+                const jsonStr = trimmed.slice(6).trim();
+                if (jsonStr === "[DONE]") continue;
                 const parsed = JSON.parse(jsonStr);
                 const candidate = parsed.candidates?.[0];
-                const textChunk = candidate?.content?.parts?.[0]?.text;
-                if (textChunk) {
-                  accumulated += textChunk;
-                  callbacks.onToken(textChunk, accumulated);
+                const parts = candidate?.content?.parts || [];
+                for (const part of parts) {
+                  if (part.text) {
+                    accumulated += part.text;
+                    callbacks.onToken(part.text, accumulated);
+                  }
                 }
               } catch (e) {
-                // Partial chunk
+                // Incomplete JSON or non-text frame
               }
             }
           }
         }
 
-        callbacks.onComplete(accumulated);
-        return;
+        if (accumulated.trim().length > 0) {
+          callbacks.onComplete(accumulated);
+          return;
+        }
       } catch (err: any) {
         if (signal.aborted) return;
         lastError = err;
@@ -690,17 +697,19 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // 6. DYNAMIC TECHNICAL SYNTHESIS (Clean fallback without irrelevant framework dumping)
+    // 6. DYNAMIC TECHNICAL SYNTHESIS (Clean, question-focused answer structure)
     const cleanPrompt = prompt.trim();
     return [
-      "⭐ **Technical Analysis: " + cleanPrompt + "**",
+      "⭐ **Key Takeaways & Explanation: " + cleanPrompt + "**",
       "",
-      "• **Core Principle & Definition:** In software and data engineering, **" + cleanPrompt + "** is evaluated based on its computational complexity, operational trade-offs, and failure recovery characteristics.",
-      "• **Working Mechanism:** Focus on state management, data isolation boundaries, and how requests/records transition between components under load.",
-      "• **Production Trade-offs:**",
-      "  - **Latency vs Throughput:** Tuning batch sizes and buffer limits to achieve optimal throughput without spiking tail p99 response times.",
-      "  - **Consistency vs Availability:** Ensuring idempotent mutations and state recovery during unexpected component crashes.",
-      "• **Interview Recommendation:** Anchor your answer around real-world scale, monitoring telemetry (metrics, traces, error rates), and automated testing."
+      "• **Core Concept:** Directly addressing **" + cleanPrompt + "**: In an interview, begin by stating the formal definition, its primary use case, and the exact problem it solves.",
+      "• **How It Works & Implementation:**",
+      "  - Identify the primary components, data flow, or state transitions involved.",
+      "  - Highlight standard patterns or algorithms used to implement this in " + primaryLang + ".",
+      "• **Key Considerations & Trade-offs:**",
+      "  - **Complexity:** Evaluate time complexity (`O(1)` vs `O(N)` vs `O(log N)`) and memory/space overhead.",
+      "  - **Edge Cases:** Consider null inputs, boundary conditions, concurrency/race conditions, and error recovery.",
+      "• **Interview Delivery Tip:** Structure your response into: (1) High-level definition, (2) Internal mechanics with a brief code/design example, and (3) Practical trade-offs from your past experience."
     ].join("\n");
   }
 }
