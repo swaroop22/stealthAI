@@ -203,71 +203,71 @@ export const CodingAssistant: React.FC<Props> = ({
   };
 
   return (
-    <div className="prateek-overlay-wrapper">
+    <div className="codingassist-overlay-wrapper">
       {/* FLOATING HUD & ANSWER CARD OVERLAY CONTAINER */}
-      <div className="prateek-floating-hud-container">
+      <div className="codingassist-floating-hud-container">
         
         {/* TOP HUD BAR */}
-        <div className="prateek-hud-top">
+        <div className="codingassist-hud-top">
           {/* Left Indicator Buttons: Screen and Mic */}
-          <div className="prateek-indicators-group no-drag">
+          <div className="codingassist-indicators-group no-drag">
             <button
-              className={`prateek-status-icon-btn ${activeSnippet ? "recording" : ""}`}
+              className={`codingassist-status-icon-btn ${activeSnippet ? "recording" : ""}`}
               onClick={onCaptureScreenshot}
               title={activeSnippet ? "Screen Captured (Click to update)" : "Capture Screen"}
             >
               <Monitor size={17} />
-              <span className="prateek-red-badge-dot" />
+              <span className="codingassist-red-badge-dot" />
             </button>
 
             <button
-              className={`prateek-status-icon-btn ${isCapturing ? "recording" : ""}`}
+              className={`codingassist-status-icon-btn ${isCapturing ? "recording" : ""}`}
               onClick={onToggleCapture}
               title={isCapturing ? "Microphone Active (Click to mute)" : "Start Listening"}
             >
               <Mic size={17} />
-              <span className="prateek-red-badge-dot" />
+              <span className="codingassist-red-badge-dot" />
             </button>
           </div>
 
           {/* Action Pills */}
-          <div className="prateek-actions-group no-drag">
+          <div className="codingassist-actions-group no-drag">
             <button
-              className="prateek-pill-btn prateek-pill-answer"
+              className="codingassist-pill-btn codingassist-pill-answer"
               onClick={() => onTriggerAnswer()}
               title="Answer current question (Ctrl + Enter)"
             >
               <span className="pill-text">Answer</span>
-              <span className="prateek-kbd">Ctrl ↵</span>
+              <span className="codingassist-kbd">Ctrl ↵</span>
             </button>
 
             <button
-              className="prateek-pill-btn"
+              className="codingassist-pill-btn"
               onClick={onCaptureScreenshot}
               title="Take screenshot & solve (Ctrl + Shift + Enter)"
             >
               <span className="pill-text">Screenshot</span>
-              <span className="prateek-kbd">Ctrl ⇧ ↵</span>
+              <span className="codingassist-kbd">Ctrl ⇧ ↵</span>
             </button>
 
             <button
-              className={`prateek-pill-btn prateek-pill-dashed ${isChatOpen ? "active" : ""}`}
+              className={`codingassist-pill-btn codingassist-pill-dashed ${isChatOpen ? "active" : ""}`}
               onClick={() => setIsChatOpen(!isChatOpen)}
               title="Toggle Custom Prompt (Ctrl + Shift + Backspace)"
             >
               <span className="pill-text">Chat</span>
-              <span className="prateek-kbd">Ctrl ⇧ ...</span>
+              <span className="codingassist-kbd">Ctrl ⇧ ...</span>
             </button>
           </div>
 
           {/* Right Controls */}
-          <div className="prateek-controls-group no-drag">
-            <button className="prateek-tool-icon-btn drag-handle" title="Click & Drag to move HUD">
+          <div className="codingassist-controls-group no-drag">
+            <button className="codingassist-tool-icon-btn drag-handle" title="Click & Drag to move HUD">
               <Move size={15} />
             </button>
 
             <button
-              className="prateek-tool-icon-btn"
+              className="codingassist-tool-icon-btn"
               onClick={() => setIsCardCollapsed(!isCardCollapsed)}
               title={isCardCollapsed ? "Expand Cards" : "Collapse Cards"}
             >
@@ -275,7 +275,7 @@ export const CodingAssistant: React.FC<Props> = ({
             </button>
 
             <button
-              className="prateek-tool-icon-btn"
+              className="codingassist-tool-icon-btn"
               onClick={() => {
                 const electron = (window as any).electronAPI;
                 if (electron?.hideWindow) {
@@ -289,9 +289,9 @@ export const CodingAssistant: React.FC<Props> = ({
               <EyeOff size={15} />
             </button>
 
-            <div className="prateek-menu-relative">
+            <div className="codingassist-menu-relative">
               <button
-                className="prateek-tool-icon-btn"
+                className="codingassist-tool-icon-btn"
                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
                 title="Options"
               >
@@ -299,7 +299,7 @@ export const CodingAssistant: React.FC<Props> = ({
               </button>
 
               {isMoreMenuOpen && (
-                <div className="prateek-dropdown-menu">
+                <div className="codingassist-dropdown-menu">
                   <button
                     onClick={() => {
                       setIsMoreMenuOpen(false);
@@ -353,32 +353,33 @@ export const CodingAssistant: React.FC<Props> = ({
 
             {/* Red Session Timer Button (e.g. 5:57) */}
             <button
-              className="prateek-timer-btn"
+              className="codingassist-timer-btn"
               onClick={handleEndApp}
-              title="Live Session Timer (Click to End)"
+              title="Live Session Timer (Click to End App)"
             >
-              {formatTimer(sessionSeconds)}
+              <span className="codingassist-timer-dot" />
+              <span className="codingassist-timer-text">{formatTimer(sessionSeconds)}</span>
             </button>
           </div>
         </div>
 
         {/* INLINE QUICK CHAT DRAWER */}
         {isChatOpen && (
-          <form className="prateek-chat-drawer no-drag" onSubmit={handleChatSubmit}>
+          <form className="codingassist-chat-drawer no-drag" onSubmit={handleChatSubmit}>
             <input
               type="text"
-              className="prateek-chat-input"
+              className="codingassist-chat-input"
               placeholder="Ask anything (e.g. Explain yourself)..."
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               autoFocus
             />
-            <button type="submit" className="prateek-chat-send-btn" title="Submit">
+            <button type="submit" className="codingassist-chat-send-btn" title="Submit">
               <Send size={15} />
             </button>
             <button
               type="button"
-              className="prateek-chat-close-btn"
+              className="codingassist-chat-close-btn"
               onClick={() => setIsChatOpen(false)}
             >
               <X size={15} />
@@ -388,15 +389,15 @@ export const CodingAssistant: React.FC<Props> = ({
 
         {/* TWO SEPARATE FLOATING CARDS (Side-by-Side: Speech Transcript & AI Solution) */}
         {!isCardCollapsed && (
-          <div className="prateek-two-cards-row no-drag">
+          <div className="codingassist-two-cards-row no-drag">
             
             {/* LEFT CARD: SPEECH TRANSCRIPT */}
-            <div className="prateek-floating-card prateek-speech-card">
+            <div className="codingassist-floating-card codingassist-speech-card">
               {/* Card Mini Toolbar */}
-              <div className="prateek-card-toolbar">
+              <div className="codingassist-card-toolbar">
                 <div className="card-toolbar-left">
                   {/* Green animated soundwave/equalizer bars */}
-                  <div className="prateek-equalizer-bars" title="Microphone Equalizer">
+                  <div className="codingassist-equalizer-bars" title="Microphone Equalizer">
                     <span className={`eq-bar bar-1 ${isCapturing ? "bouncing" : ""}`} />
                     <span className={`eq-bar bar-2 ${isCapturing ? "bouncing" : ""}`} />
                     <span className={`eq-bar bar-3 ${isCapturing ? "bouncing" : ""}`} />
@@ -404,9 +405,9 @@ export const CodingAssistant: React.FC<Props> = ({
                   </div>
 
                   {/* Language Selector Dropdown */}
-                  <div className="prateek-lang-relative">
+                  <div className="codingassist-lang-relative">
                     <button
-                      className="prateek-lang-btn"
+                      className="codingassist-lang-btn"
                       onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
                       title="Select Speech Language"
                     >
@@ -416,7 +417,7 @@ export const CodingAssistant: React.FC<Props> = ({
                     </button>
 
                     {isLangMenuOpen && (
-                      <div className="prateek-lang-dropdown">
+                      <div className="codingassist-lang-dropdown">
                         {languages.map((lang) => (
                           <button
                             key={lang}
@@ -436,7 +437,7 @@ export const CodingAssistant: React.FC<Props> = ({
 
                 <div className="card-toolbar-right">
                   <button
-                    className="prateek-mini-clear-btn"
+                    className="codingassist-mini-clear-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       onClearTranscript();
@@ -448,7 +449,7 @@ export const CodingAssistant: React.FC<Props> = ({
                   </button>
 
                   <button
-                    className="prateek-mini-expand-btn"
+                    className="codingassist-mini-expand-btn"
                     title="Expand View"
                   >
                     <Maximize2 size={12} />
@@ -457,15 +458,15 @@ export const CodingAssistant: React.FC<Props> = ({
               </div>
 
               {/* Speech Chat Body: Right-aligned messages */}
-              <div className="prateek-speech-chat-body">
+              <div className="codingassist-speech-chat-body">
                 {transcript.length === 0 && !isCapturing && (
-                  <div className="prateek-empty-speech-state">
+                  <div className="codingassist-empty-speech-state">
                     <p className="empty-speech-desc">Transcript cleared. Turn on the mic to start listening.</p>
                   </div>
                 )}
 
                 {transcript.map((item) => (
-                  <div key={item.id} className="prateek-chat-message-row">
+                  <div key={item.id} className="codingassist-chat-message-row">
                     <div className="chat-message-text">{item.text}</div>
                     <div className="chat-message-meta">
                       {item.speaker === "Candidate" ? "You" : item.speaker} · {item.timestamp}
@@ -475,7 +476,7 @@ export const CodingAssistant: React.FC<Props> = ({
 
                 {/* LIVE INTERIM STREAM (while someone is speaking right now) */}
                 {isCapturing && interimText.trim() && (
-                  <div className="prateek-chat-message-row live">
+                  <div className="codingassist-chat-message-row live">
                     <div className="chat-message-text live">
                       {interimText.trim()}
                     </div>
@@ -490,12 +491,12 @@ export const CodingAssistant: React.FC<Props> = ({
             </div>
 
             {/* RIGHT CARD: AI SOLUTION / ANSWER */}
-            <div className="prateek-floating-card prateek-answer-card">
+            <div className="codingassist-floating-card codingassist-answer-card">
               {/* Card Mini Toolbar */}
-              <div className="prateek-card-toolbar">
+              <div className="codingassist-card-toolbar">
                 <div className="card-toolbar-left">
                   <button
-                    className="prateek-mini-nav-btn"
+                    className="codingassist-mini-nav-btn"
                     onClick={handlePrev}
                     disabled={!canGoPrev}
                     title="Previous Answer (Ctrl + ←)"
@@ -503,7 +504,7 @@ export const CodingAssistant: React.FC<Props> = ({
                     <span>Ctrl ←</span>
                   </button>
                   <button
-                    className="prateek-mini-nav-btn"
+                    className="codingassist-mini-nav-btn"
                     onClick={handleNext}
                     disabled={!canGoNext}
                     title="Next Answer (Ctrl + →)"
@@ -514,7 +515,7 @@ export const CodingAssistant: React.FC<Props> = ({
 
                 <div className="card-toolbar-right">
                   <button
-                    className="prateek-mini-clear-btn"
+                    className="codingassist-mini-clear-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       onClearCurrentAnswer();
@@ -526,7 +527,7 @@ export const CodingAssistant: React.FC<Props> = ({
                   </button>
 
                   <button
-                    className="prateek-mini-expand-btn"
+                    className="codingassist-mini-expand-btn"
                     title="Expand View"
                   >
                     <Maximize2 size={12} />
@@ -535,7 +536,7 @@ export const CodingAssistant: React.FC<Props> = ({
               </div>
 
               {/* Answer Content Body */}
-              <div className="prateek-answer-content-body">
+              <div className="codingassist-answer-content-body">
                 {activeResponse ? (
                   <>
                     {/* Question Row */}
@@ -626,5 +627,5 @@ export const CodingAssistant: React.FC<Props> = ({
 };
  
 export const CodingAssitant = CodingAssistant;
-export const PrateekOverlay = CodingAssistant;
+export const CodingAssistOverlay = CodingAssistant;
 export default CodingAssistant;

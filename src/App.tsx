@@ -119,7 +119,7 @@ export default function App() {
       if (viewMode === "dashboard") {
         electron.resizeWindow(1200, 800);
       } else {
-        electron.resizeWindow(720, 520);
+        electron.resizeWindow(920, 520);
       }
     }
   }, [viewMode]);
