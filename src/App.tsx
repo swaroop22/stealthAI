@@ -46,16 +46,7 @@ In my current role at **PNC**, I lead the enterprise data lakehouse migration an
   tokensGenerated: 58
 };
 
-const DEFAULT_INITIAL_TRANSCRIPT: TranscriptItem[] = [
-  { id: "init-1", timestamp: "03:56 PM", speaker: "Candidate", text: "Yeah." },
-  { id: "init-2", timestamp: "03:57 PM", speaker: "Candidate", text: "So. Then I could." },
-  { id: "init-3", timestamp: "03:57 PM", speaker: "Candidate", text: "China." },
-  { id: "init-4", timestamp: "03:57 PM", speaker: "Candidate", text: "Okay. So." },
-  { id: "init-5", timestamp: "03:57 PM", speaker: "Candidate", text: "Of course." },
-  { id: "init-6", timestamp: "03:57 PM", speaker: "Candidate", text: "You." },
-  { id: "init-7", timestamp: "03:57 PM", speaker: "Candidate", text: "Didn't. Didn't. Know." },
-  { id: "init-8", timestamp: "03:57 PM", speaker: "Candidate", text: "This." },
-];
+const DEFAULT_INITIAL_TRANSCRIPT: TranscriptItem[] = [];
 
 export default function App() {
   const [viewMode, setViewMode] = useState<"overlay" | "dashboard">("overlay");
@@ -89,8 +80,8 @@ export default function App() {
   const [activeMode, setActiveMode] = useState<AssistantMode>("coding");
 
   // Multi-response history
-  const [responses, setResponses] = useState<AIResponse[]>([DEFAULT_INITIAL_RESPONSE]);
-  const [activeResponseId, setActiveResponseId] = useState<string | null>("initial-explain-yourself-response");
+  const [responses, setResponses] = useState<AIResponse[]>([]);
+  const [activeResponseId, setActiveResponseId] = useState<string | null>(null);
 
   const [autoAnswer, setAutoAnswer] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);

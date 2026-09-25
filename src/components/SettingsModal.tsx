@@ -155,34 +155,44 @@ export const SettingsModal: React.FC<Props> = ({
               </div>
               <input
                 type="text"
-                placeholder="AIzaSy... or AQ...."
+                placeholder="AIzaSy..."
                 value={localApiKey}
                 onChange={(e) => setLocalApiKey(e.target.value.trim())}
                 style={{
                   borderColor:
-                    localApiKey && localApiKey.length < 20
+                    localApiKey && localApiKey.startsWith("AQ.")
+                      ? "#ef4444"
+                      : localApiKey && localApiKey.length < 20
                       ? "#f59e0b"
-                      : localApiKey && localApiKey.length >= 20
+                      : localApiKey && localApiKey.startsWith("AIzaSy")
                       ? "#10b981"
                       : undefined
                 }}
               />
-              {localApiKey && localApiKey.length < 20 && (
-                <div style={{ marginTop: "6px", fontSize: "11.5px", color: "#f59e0b", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span>⚠️</span>
+              {localApiKey && localApiKey.startsWith("AQ.") && (
+                <div style={{ marginTop: "6px", fontSize: "11.5px", color: "#f87171", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>❌</span>
                   <span>
-                    API key is too short ({localApiKey.length} chars). Gemini keys are typically 39+ characters.
+                    This looks like a Google Cloud OAuth token (starts with AQ.). A Gemini API Key starts with <strong>AIzaSy...</strong> from Google AI Studio.
                   </span>
                 </div>
               )}
-              {localApiKey && localApiKey.length >= 20 && (
+              {localApiKey && !localApiKey.startsWith("AQ.") && localApiKey.length < 20 && (
+                <div style={{ marginTop: "6px", fontSize: "11.5px", color: "#f59e0b", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span>⚠️</span>
+                  <span>
+                    API key is too short ({localApiKey.length} chars). Gemini keys start with <strong>AIzaSy</strong> and are 39 characters.
+                  </span>
+                </div>
+              )}
+              {localApiKey && localApiKey.startsWith("AIzaSy") && localApiKey.length >= 35 && (
                 <div style={{ marginTop: "6px", fontSize: "11.5px", color: "#10b981", display: "flex", alignItems: "center", gap: "6px" }}>
                   <span>✓</span>
-                  <span>Active Gemini API key detected ({localApiKey.slice(0, 4)}...).</span>
+                  <span>Valid Gemini API key format (AIzaSy...).</span>
                 </div>
               )}
               <span className="field-hint" style={{ marginTop: "4px", display: "block" }}>
-                Enables automated Speech-to-Text and live reasoning in macOS desktop app. Stored locally.
+                Enables live AI reasoning and intelligent interview answers. Stored 100% locally on your machine.
               </span>
             </div>
           </div>
