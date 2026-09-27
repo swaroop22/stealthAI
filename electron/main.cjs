@@ -212,7 +212,6 @@ ipcMain.handle('get-screen-sources', async () => {
 // NATIVE REAL-TIME MACOS SPEECH RECOGNITION (SFSpeechRecognizer)
 const { spawn } = require('child_process');
 const readline = require('readline');
-const fs = require('fs');
 
 let speechProcess = null;
 let isIntentionalStop = false;
