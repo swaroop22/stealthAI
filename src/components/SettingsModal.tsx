@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, User, Key, Shield, Check, ExternalLink, Cpu, Eye, EyeOff, Sparkles, Globe, Server, CheckCircle2, AlertTriangle } from "lucide-react";
+import { X, User, Key, Shield, Check, ExternalLink, Cpu, Eye, EyeOff, Sparkles, Globe, Server, CheckCircle2, AlertTriangle, Disc, Folder } from "lucide-react";
 import type { CandidateProfile, ConsentAudit, AIProvider, AIProviderConfig } from "../types";
 
 export interface ProviderDef {
@@ -142,6 +142,9 @@ interface Props {
   apiKey?: string;
   aiConfig?: AIProviderConfig;
   consent: ConsentAudit;
+  isAutoRecordEnabled?: boolean;
+  onToggleAutoRecord?: (enabled: boolean) => void;
+  onOpenRecordingsFolder?: () => void;
   onSaveProfile: (profile: CandidateProfile) => void;
   onSaveApiKey?: (key: string) => void;
   onSaveAIConfig?: (config: AIProviderConfig) => void;
@@ -155,6 +158,9 @@ export const SettingsModal: React.FC<Props> = ({
   apiKey = "",
   aiConfig,
   consent,
+  isAutoRecordEnabled = true,
+  onToggleAutoRecord,
+  onOpenRecordingsFolder,
   onSaveProfile,
   onSaveApiKey,
   onSaveAIConfig,
@@ -168,6 +174,7 @@ export const SettingsModal: React.FC<Props> = ({
 
   const [localProfile, setLocalProfile] = useState<CandidateProfile>(profile);
   const [localConsent, setLocalConsent] = useState<ConsentAudit>(consent);
+  const [localAutoRecord, setLocalAutoRecord] = useState(isAutoRecordEnabled);
   const [showKey, setShowKey] = useState(false);
   const [savedAlert, setSavedAlert] = useState(false);
 
@@ -217,6 +224,9 @@ export const SettingsModal: React.FC<Props> = ({
     }
     if (onSaveApiKey) {
       onSaveApiKey(localApiKey.trim());
+    }
+    if (onToggleAutoRecord) {
+      onToggleAutoRecord(localAutoRecord);
     }
     onSaveConsent(localConsent);
 
@@ -674,6 +684,53 @@ export const SettingsModal: React.FC<Props> = ({
                 <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", lineHeight: 1.5 }}>
                   API keys and candidate profiles are stored exclusively in your local machine&apos;s localStorage. No third-party analytics, tracking pixels, or remote telemetry servers are used.
                 </p>
+              </div>
+
+              {/* SECTION: AUDIO RECORDING TO COMPUTER */}
+              <div className="settings-section" style={{ marginTop: "1.25rem", borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "1.25rem" }}>
+                <div className="section-title">
+                  <Disc size={16} className="text-accent" />
+                  <h4>Session Audio Recording</h4>
+                </div>
+                <p className="section-desc">
+                  Record all sessions as audio files saved directly to your local computer drive.
+                </p>
+
+                <label className="checkbox-label" style={{ marginTop: "6px" }}>
+                  <input
+                    type="checkbox"
+                    checked={localAutoRecord}
+                    onChange={(e) => setLocalAutoRecord(e.target.checked)}
+                  />
+                  <span className="checkbox-custom"></span>
+                  <span className="label-text">
+                    Auto-record all sessions to local computer (Enabled by default)
+                  </span>
+                </label>
+
+                <div style={{ marginTop: "10px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: "8px", background: "rgba(15, 23, 42, 0.7)", border: "1px solid rgba(255, 255, 255, 0.08)", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <div style={{ fontSize: "11.5px", color: "#94a3b8" }}>Local Save Directory:</div>
+                    <div style={{ fontSize: "12.5px", color: "#38bdf8", fontFamily: "monospace", marginTop: "2px" }}>
+                      ~/Documents/StealthAI_Recordings
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      if (onOpenRecordingsFolder) onOpenRecordingsFolder();
+                      else {
+                        const electron = (window as any).electronAPI;
+                        if (electron?.openRecordingsFolder) electron.openRecordingsFolder();
+                      }
+                    }}
+                    style={{ fontSize: "12px", padding: "6px 12px", display: "flex", alignItems: "center", gap: "6px" }}
+                  >
+                    <Folder size={14} />
+                    <span>Open Recordings Folder</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}

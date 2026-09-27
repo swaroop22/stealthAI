@@ -106,6 +106,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     stopSpeechProcess();
+    finalizeActiveRecording();
     mainWindow = null;
   });
 }
@@ -189,6 +190,88 @@ ipcMain.handle('get-stored-config', () => {
 
 ipcMain.on('save-stored-config', (_event, config) => {
   writePersistentConfig(config);
+});
+
+// SESSION AUDIO RECORDING TO COMPUTER (Documents/StealthAI_Recordings)
+function getRecordingsDirectory() {
+  let docPath;
+  try {
+    docPath = app.getPath('documents');
+  } catch (e) {
+    docPath = app.getPath('userData');
+  }
+  const recDir = path.join(docPath, 'StealthAI_Recordings');
+  if (!fs.existsSync(recDir)) {
+    try {
+      fs.mkdirSync(recDir, { recursive: true });
+    } catch (err) {
+      console.warn('Failed to create recordings directory:', err);
+    }
+  }
+  return recDir;
+}
+
+let activeRecordingFilePath = null;
+let activeRecordingFileStream = null;
+
+function finalizeActiveRecording() {
+  if (activeRecordingFileStream) {
+    try {
+      activeRecordingFileStream.end();
+    } catch (e) {}
+    activeRecordingFileStream = null;
+    activeRecordingFilePath = null;
+  }
+}
+
+ipcMain.handle('start-session-recording', (_e, { fileName }) => {
+  try {
+    finalizeActiveRecording();
+    const recDir = getRecordingsDirectory();
+    const cleanDate = new Date().toISOString().replace(/[:.]/g, '-');
+    const finalName = fileName || `StealthAI_Session_${cleanDate}.webm`;
+    activeRecordingFilePath = path.join(recDir, finalName);
+    activeRecordingFileStream = fs.createWriteStream(activeRecordingFilePath, { flags: 'w' });
+    return { success: true, filePath: activeRecordingFilePath, dir: recDir };
+  } catch (err) {
+    console.error('Error starting session recording:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.on('append-recording-chunk', (_e, chunkBuffer) => {
+  if (activeRecordingFileStream && chunkBuffer) {
+    try {
+      activeRecordingFileStream.write(Buffer.from(chunkBuffer));
+    } catch (err) {
+      console.warn('Failed to write recording chunk:', err);
+    }
+  }
+});
+
+ipcMain.handle('finish-session-recording', () => {
+  return new Promise((resolve) => {
+    if (activeRecordingFileStream) {
+      const savedPath = activeRecordingFilePath;
+      activeRecordingFileStream.end(() => {
+        activeRecordingFileStream = null;
+        activeRecordingFilePath = null;
+        resolve({ success: true, filePath: savedPath });
+      });
+    } else {
+      resolve({ success: true, filePath: null });
+    }
+  });
+});
+
+ipcMain.handle('open-recordings-folder', () => {
+  const recDir = getRecordingsDirectory();
+  shell.openPath(recDir);
+  return recDir;
+});
+
+ipcMain.handle('get-recordings-folder', () => {
+  return getRecordingsDirectory();
 });
 
 // IPC handler to list screen/window sources if needed by renderer
@@ -356,8 +439,10 @@ app.on('will-quit', () => {
     globalShortcut.unregisterAll();
   } catch (e) {}
   stopSpeechProcess();
+  finalizeActiveRecording();
 });
 
 app.on('before-quit', () => {
   stopSpeechProcess();
+  finalizeActiveRecording();
 });

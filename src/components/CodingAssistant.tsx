@@ -16,7 +16,8 @@ import {
   Send,
   X,
   LayoutGrid,
-  EyeOff
+  EyeOff,
+  Folder
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem, AIProviderConfig } from "../types";
 
@@ -32,6 +33,10 @@ interface Props {
   profile: CandidateProfile;
   apiKey?: string;
   aiConfig?: AIProviderConfig;
+  isRecordingAudio?: boolean;
+  recordingSeconds?: number;
+  onToggleRecording?: () => void;
+  onOpenRecordingsFolder?: () => void;
   onToggleCapture: () => void;
   onCaptureScreenshot: () => void;
   onTriggerAnswer: (promptOverride?: string) => void;
@@ -54,6 +59,10 @@ export const CodingAssistant: React.FC<Props> = ({
   activeSnippet,
   apiKey,
   aiConfig,
+  isRecordingAudio = false,
+  recordingSeconds = 0,
+  onToggleRecording,
+  onOpenRecordingsFolder,
   onToggleCapture,
   onCaptureScreenshot,
   onTriggerAnswer,
@@ -307,6 +316,41 @@ export const CodingAssistant: React.FC<Props> = ({
               <span style={{ fontSize: "11px" }}>{providerIcon}</span>
               <span className="pill-text" style={{ fontWeight: 600 }}>{getModelLabel()}</span>
             </button>
+
+            {/* Audio Recording to Computer Indicator Pill */}
+            <button
+              className="codingassist-pill-btn"
+              onClick={onToggleRecording}
+              title={
+                isRecordingAudio
+                  ? `Recording session audio (${formatTimer(recordingSeconds)}). Saved live to ~/Documents/StealthAI_Recordings. Click to pause.`
+                  : "Audio recording paused. Click to resume recording."
+              }
+              style={{
+                background: isRecordingAudio ? "rgba(239, 68, 68, 0.16)" : "rgba(255, 255, 255, 0.04)",
+                borderColor: isRecordingAudio ? "rgba(239, 68, 68, 0.6)" : "rgba(255, 255, 255, 0.12)",
+                color: isRecordingAudio ? "#fca5a5" : "#94a3b8",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                paddingLeft: "7px",
+                paddingRight: "7px"
+              }}
+            >
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  backgroundColor: isRecordingAudio ? "#ef4444" : "#64748b",
+                  boxShadow: isRecordingAudio ? "0 0 8px #ef4444" : "none",
+                  display: "inline-block"
+                }}
+              />
+              <span className="pill-text" style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "0.4px" }}>
+                {isRecordingAudio ? `REC ${formatTimer(recordingSeconds)}` : "REC PAUSED"}
+              </span>
+            </button>
           </div>
 
           {/* Right Controls */}
@@ -377,6 +421,16 @@ export const CodingAssistant: React.FC<Props> = ({
                   >
                     <Settings size={15} />
                     <span>Settings & API Key</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      if (onOpenRecordingsFolder) onOpenRecordingsFolder();
+                    }}
+                    title="Open ~/Documents/StealthAI_Recordings folder on your computer"
+                  >
+                    <Folder size={15} />
+                    <span>Open Recordings Folder</span>
                   </button>
                   <button
                     onClick={() => {

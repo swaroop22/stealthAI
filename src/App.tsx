@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { AlertCircle, CheckCircle2, LayoutGrid, Layers } from "lucide-react";
 import { extractLastQuestionFromSpeech } from "./utils/speechExtractor";
+import { AudioRecordingService, RecordingState } from "./services/audioRecordingService";
 import "./App.css";
 
 const DEFAULT_PROFILE: CandidateProfile = {
@@ -120,6 +121,16 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
+
+  // Audio Recording to Computer (Default: Enabled)
+  const [isAutoRecordEnabled, setIsAutoRecordEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem("stealthai_autorecord");
+    return saved !== "false";
+  });
+  const [recordingState, setRecordingState] = useState<RecordingState>({
+    isRecording: false,
+    seconds: 0
+  });
 
   const autoAnswerRef = useRef<boolean>(false);
   const speechAccumulatorRef = useRef<string>("");
@@ -337,6 +348,34 @@ export default function App() {
     triggerGenRef.current = triggerGeneration;
   }, [triggerGeneration]);
 
+  // Sync auto-record setting and listen for recording state changes
+  useEffect(() => {
+    localStorage.setItem("stealthai_autorecord", String(isAutoRecordEnabled));
+  }, [isAutoRecordEnabled]);
+
+  useEffect(() => {
+    const unsubscribe = AudioRecordingService.addListener((state) => {
+      setRecordingState(state);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Automatically start audio recording to computer disk on default
+  useEffect(() => {
+    let active = true;
+    if (isAutoRecordEnabled) {
+      AudioRecordingService.startRecording().then((ok) => {
+        if (ok && active) {
+          console.log("Audio recording to computer started on default.");
+        }
+      });
+    }
+    return () => {
+      active = false;
+      AudioRecordingService.stopRecording();
+    };
+  }, [isAutoRecordEnabled]);
+
   // Audio capture handler
   const handleToggleCapture = useCallback(async () => {
     if (!consent.granted) {
@@ -379,6 +418,24 @@ export default function App() {
       }
     }
   }, [consent.granted, isCapturing, activeSpeaker, apiKey]);
+
+  // Audio recording handlers (save to computer disk)
+  const handleToggleRecording = useCallback(async () => {
+    if (recordingState.isRecording) {
+      const savedPath = await AudioRecordingService.stopRecording();
+      showToast(savedPath ? `Session audio saved: ${savedPath.split("/").pop()}` : "Audio recording stopped.", "info");
+    } else {
+      const ok = await AudioRecordingService.startRecording();
+      if (ok) {
+        showToast("Recording session audio to computer drive.", "success");
+      }
+    }
+  }, [recordingState.isRecording]);
+
+  const handleOpenRecordingsFolder = useCallback(async () => {
+    await AudioRecordingService.openFolder();
+    showToast("Opened Recordings folder in ~/Documents/StealthAI_Recordings", "info");
+  }, []);
 
   const handleCaptureScreenshot = async () => {
     try {
@@ -582,6 +639,10 @@ export default function App() {
           profile={profile}
           apiKey={apiKey}
           aiConfig={aiConfig}
+          isRecordingAudio={recordingState.isRecording}
+          recordingSeconds={recordingState.seconds}
+          onToggleRecording={handleToggleRecording}
+          onOpenRecordingsFolder={handleOpenRecordingsFolder}
           onToggleCapture={handleToggleCapture}
           onCaptureScreenshot={handleCaptureScreenshot}
           onTriggerAnswer={handleTriggerAnswer}
@@ -737,6 +798,9 @@ export default function App() {
         aiConfig={aiConfig}
         apiKey={apiKey}
         consent={consent}
+        isAutoRecordEnabled={isAutoRecordEnabled}
+        onToggleAutoRecord={(enabled) => setIsAutoRecordEnabled(enabled)}
+        onOpenRecordingsFolder={handleOpenRecordingsFolder}
         onSaveProfile={(p) => setProfile(p)}
         onSaveAIConfig={(cfg) => setAIConfig(cfg)}
         onSaveApiKey={(k) => setAIConfig((prev) => ({ ...prev, apiKey: k }))}

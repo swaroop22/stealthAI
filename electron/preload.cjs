@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopNativeSpeech: () => ipcRenderer.send('stop-native-speech'),
   getStoredConfig: () => ipcRenderer.invoke('get-stored-config'),
   saveStoredConfig: (config) => ipcRenderer.send('save-stored-config', config),
+  startSessionRecording: (data) => ipcRenderer.invoke('start-session-recording', data || {}),
+  appendRecordingChunk: (buffer) => ipcRenderer.send('append-recording-chunk', buffer),
+  finishSessionRecording: () => ipcRenderer.invoke('finish-session-recording'),
+  openRecordingsFolder: () => ipcRenderer.invoke('open-recordings-folder'),
+  getRecordingsFolder: () => ipcRenderer.invoke('get-recordings-folder'),
   onNativeSpeech: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('native-speech-event', handler);
