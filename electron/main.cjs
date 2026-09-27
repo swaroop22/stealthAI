@@ -1,5 +1,6 @@
 const { app, BrowserWindow, session, desktopCapturer, ipcMain, shell, globalShortcut } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 // Pass Google API Key if provided via environment
 if (process.env.GOOGLE_API_KEY) {
@@ -142,6 +143,52 @@ ipcMain.on('resize-window', (e, { width, height }) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setSize(width, height);
   }
+});
+
+function getDiskConfigPath() {
+  try {
+    return path.join(app.getPath('userData'), 'stealthai_config.json');
+  } catch (e) {
+    return path.join(__dirname, '../.stealthai_config.json');
+  }
+}
+
+function readPersistentConfig() {
+  const rootConfigPath = path.join(__dirname, '../.stealthai_config.json');
+  if (fs.existsSync(rootConfigPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(rootConfigPath, 'utf8'));
+      if (data && data.apiKey) return data;
+    } catch (e) {}
+  }
+  const userPath = getDiskConfigPath();
+  if (fs.existsSync(userPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(userPath, 'utf8'));
+      if (data && data.apiKey) return data;
+    } catch (e) {}
+  }
+  return null;
+}
+
+function writePersistentConfig(config) {
+  if (!config) return;
+  try {
+    const userPath = getDiskConfigPath();
+    fs.writeFileSync(userPath, JSON.stringify(config, null, 2), 'utf8');
+  } catch (e) {}
+  try {
+    const rootPath = path.join(__dirname, '../.stealthai_config.json');
+    fs.writeFileSync(rootPath, JSON.stringify(config, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+ipcMain.handle('get-stored-config', () => {
+  return readPersistentConfig();
+});
+
+ipcMain.on('save-stored-config', (_event, config) => {
+  writePersistentConfig(config);
 });
 
 // IPC handler to list screen/window sources if needed by renderer

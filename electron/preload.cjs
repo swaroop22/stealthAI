@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeWindow: (width, height) => ipcRenderer.send('resize-window', { width, height }),
   startNativeSpeech: () => ipcRenderer.send('start-native-speech'),
   stopNativeSpeech: () => ipcRenderer.send('stop-native-speech'),
+  getStoredConfig: () => ipcRenderer.invoke('get-stored-config'),
+  saveStoredConfig: (config) => ipcRenderer.send('save-stored-config', config),
   onNativeSpeech: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('native-speech-event', handler);

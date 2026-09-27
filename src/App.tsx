@@ -86,11 +86,21 @@ export default function App() {
     const saved = localStorage.getItem("stealthai_ai_config");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed?.apiKey && parsed.apiKey.trim().length > 5) {
+          return parsed;
+        }
       } catch (e) {}
     }
     const legacyKey = localStorage.getItem("stealthai_gemini_key") || "";
-    return AIEngine.normalizeConfig(legacyKey);
+    if (legacyKey && legacyKey.trim().length > 5) {
+      return AIEngine.normalizeConfig(legacyKey);
+    }
+    const envKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
+    if (envKey) {
+      return { provider: "gemini", apiKey: envKey, model: "gemini-2.5-flash" };
+    }
+    return AIEngine.normalizeConfig("");
   });
 
   const apiKey = aiConfig.apiKey;
@@ -148,10 +158,29 @@ export default function App() {
     localStorage.setItem("stealthai_profile", JSON.stringify(profile));
   }, [profile]);
 
+  // Load persistent config from Electron disk storage on startup
+  useEffect(() => {
+    const electron = (window as any).electronAPI;
+    if (electron?.getStoredConfig) {
+      electron
+        .getStoredConfig()
+        .then((stored: any) => {
+          if (stored && stored.apiKey && stored.apiKey.trim().length > 5) {
+            setAIConfig(stored);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     localStorage.setItem("stealthai_ai_config", JSON.stringify(aiConfig));
     localStorage.setItem("stealthai_gemini_key", aiConfig.apiKey);
     SpeechService.setAIConfig(aiConfig);
+    const electron = (window as any).electronAPI;
+    if (electron?.saveStoredConfig && aiConfig.apiKey) {
+      electron.saveStoredConfig(aiConfig);
+    }
   }, [aiConfig]);
 
   // Auto-start speech capture on default launch
