@@ -50,6 +50,23 @@ In my current role at **PNC**, I lead the enterprise data lakehouse migration an
 
 const DEFAULT_INITIAL_TRANSCRIPT: TranscriptItem[] = [];
 
+const IGNORED_AUTO_ANSWER_PHRASES = [
+  "can you hear me",
+  "can you see my screen",
+  "am i audible",
+  "are you able to hear me",
+  "are you there",
+  "is my screen visible",
+  "shall we start",
+  "can we start",
+  "are you ready",
+  "how are you",
+  "how are you doing",
+  "good morning",
+  "good afternoon",
+  "nice to meet you"
+];
+
 export default function App() {
   const [viewMode, setViewMode] = useState<"overlay" | "dashboard">("overlay");
 
@@ -117,7 +134,10 @@ export default function App() {
   const [responses, setResponses] = useState<AIResponse[]>([]);
   const [activeResponseId, setActiveResponseId] = useState<string | null>(null);
 
-  const [autoAnswer, setAutoAnswer] = useState<boolean>(false);
+  const [autoAnswer, setAutoAnswer] = useState<boolean>(() => {
+    const saved = localStorage.getItem("stealthai_auto_answer");
+    return saved !== "false";
+  });
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
@@ -132,16 +152,84 @@ export default function App() {
     seconds: 0
   });
 
-  const autoAnswerRef = useRef<boolean>(false);
+  const autoAnswerRef = useRef<boolean>(true);
   const speechAccumulatorRef = useRef<string>("");
   const autoAnswerTimerRef = useRef<any>(null);
+  const lastAutoAnsweredQuestionRef = useRef<string>("");
   const lastTriggerTimeRef = useRef<number>(0);
   const isGeneratingRef = useRef<boolean>(false);
-  const triggerGenRef = useRef<(prompt: string, modeOverride?: AssistantMode) => void>(() => {});
+  const triggerGenRef = useRef<(prompt: string, modeOverride?: AssistantMode, contextText?: string) => void>(() => {});
+  const transcriptRef = useRef<TranscriptItem[]>([]);
+  const scheduleAutoAnswerRef = useRef<(items?: TranscriptItem[], liveInterim?: string) => void>(() => {});
+
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
 
   useEffect(() => {
     autoAnswerRef.current = autoAnswer;
+    localStorage.setItem("stealthai_auto_answer", String(autoAnswer));
   }, [autoAnswer]);
+
+  const scheduleAutoAnswer = useCallback(
+    (items?: TranscriptItem[], liveInterim?: string) => {
+      if (!autoAnswerRef.current) return;
+
+      if (autoAnswerTimerRef.current) {
+        clearTimeout(autoAnswerTimerRef.current);
+        autoAnswerTimerRef.current = null;
+      }
+
+      const currentList = items || transcriptRef.current;
+      const extracted = extractLastQuestionFromSpeech(currentList, liveInterim);
+      if (!extracted.question || extracted.question.trim().length < 5) {
+        return;
+      }
+
+      const candidateQ = extracted.question.trim();
+      const lowerCandidate = candidateQ.toLowerCase();
+
+      for (const phrase of IGNORED_AUTO_ANSWER_PHRASES) {
+        if (lowerCandidate.includes(phrase)) {
+          return;
+        }
+      }
+
+      const normCandidate = candidateQ.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const normLast = lastAutoAnsweredQuestionRef.current.toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (normCandidate && normLast) {
+        if (normCandidate === normLast) return;
+        if (normLast.includes(normCandidate) && normLast.length - normCandidate.length < 15) return;
+        if (normCandidate.includes(normLast) && normCandidate.length - normLast.length < 10) return;
+      }
+
+      autoAnswerTimerRef.current = setTimeout(() => {
+        if (!autoAnswerRef.current) return;
+
+        const latestList = transcriptRef.current;
+        const finalExtracted = extractLastQuestionFromSpeech(latestList, liveInterim);
+        const finalQ = (finalExtracted.question || candidateQ).trim();
+
+        if (finalQ.length < 5) return;
+
+        const finalNorm = finalQ.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const currentLastNorm = lastAutoAnsweredQuestionRef.current.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+        if (finalNorm && currentLastNorm && (finalNorm === currentLastNorm || currentLastNorm.includes(finalNorm))) {
+          return;
+        }
+
+        lastAutoAnsweredQuestionRef.current = finalQ;
+        showToast(`⚡ Auto-Answering: "${finalQ.slice(0, 42)}..."`, "info");
+        triggerGenRef.current(finalQ, undefined, finalExtracted.fullTranscriptText);
+      }, 1100);
+    },
+    []
+  );
+
+  useEffect(() => {
+    scheduleAutoAnswerRef.current = scheduleAutoAnswer;
+  }, [scheduleAutoAnswer]);
 
   // Resize Electron window dynamically on viewMode change
   useEffect(() => {
@@ -206,12 +294,19 @@ export default function App() {
       const success = await SpeechService.startListening(
         (finalItem) => {
           if (!active) return;
-          setTranscript((prev) => [...prev, finalItem]);
+          setTranscript((prev) => {
+            const next = [...prev, finalItem];
+            scheduleAutoAnswerRef.current?.(next, "");
+            return next;
+          });
           setInterimText("");
         },
         (interim) => {
           if (!active) return;
           setInterimText(interim);
+          if (interim && interim.trim().length > 8) {
+            scheduleAutoAnswerRef.current?.(undefined, interim);
+          }
         },
         (err) => {
           if (!active) return;
@@ -401,11 +496,18 @@ export default function App() {
       SpeechService.setAIConfig(aiConfig);
       const success = await SpeechService.startListening(
         (finalItem) => {
-          setTranscript((prev) => [...prev, finalItem]);
+          setTranscript((prev) => {
+            const next = [...prev, finalItem];
+            scheduleAutoAnswerRef.current?.(next, "");
+            return next;
+          });
           setInterimText("");
         },
         (interim) => {
           setInterimText(interim);
+          if (interim && interim.trim().length > 8) {
+            scheduleAutoAnswerRef.current?.(undefined, interim);
+          }
         },
         (err) => {
           showToast(err, "error");
@@ -451,7 +553,13 @@ export default function App() {
   };
 
   const handleTriggerAnswer = (promptOverride?: string) => {
+    if (autoAnswerTimerRef.current) {
+      clearTimeout(autoAnswerTimerRef.current);
+      autoAnswerTimerRef.current = null;
+    }
+
     if (promptOverride && promptOverride.trim()) {
+      lastAutoAnsweredQuestionRef.current = promptOverride.trim();
       triggerGeneration(promptOverride.trim());
       return;
     }
@@ -459,6 +567,7 @@ export default function App() {
     // Extract the latest/last question from the end of the speech transcript
     const extracted = extractLastQuestionFromSpeech(transcript, interimText);
     if (extracted.question && extracted.question.trim().length > 2) {
+      lastAutoAnsweredQuestionRef.current = extracted.question.trim();
       showToast(`Answering: "${extracted.question.slice(0, 42)}..."`, "info");
       triggerGeneration(extracted.question.trim(), undefined, extracted.fullTranscriptText);
       return;
@@ -469,10 +578,15 @@ export default function App() {
       return;
     }
 
-    showToast("Please turn on the mic and speak, then click Answer.", "info");
+    showToast("Please speak a question or click a preset.", "info");
   };
 
   const handleClearCurrentAnswer = () => {
+    if (autoAnswerTimerRef.current) {
+      clearTimeout(autoAnswerTimerRef.current);
+      autoAnswerTimerRef.current = null;
+    }
+    lastAutoAnsweredQuestionRef.current = "";
     if (activeResponseId) {
       const remaining = responses.filter((r) => r.id !== activeResponseId);
       setResponses(remaining);
@@ -639,6 +753,14 @@ export default function App() {
           profile={profile}
           apiKey={apiKey}
           aiConfig={aiConfig}
+          autoAnswer={autoAnswer}
+          onToggleAutoAnswer={() => {
+            setAutoAnswer((prev) => {
+              const nextVal = !prev;
+              showToast(`Auto-Answer is now ${nextVal ? "ON (Hands-Free)" : "OFF"}`, "info");
+              return nextVal;
+            });
+          }}
           isRecordingAudio={recordingState.isRecording}
           recordingSeconds={recordingState.seconds}
           onToggleRecording={handleToggleRecording}
@@ -651,6 +773,11 @@ export default function App() {
           onClearTranscript={() => {
             setTranscript([]);
             setInterimText("");
+            lastAutoAnsweredQuestionRef.current = "";
+            if (autoAnswerTimerRef.current) {
+              clearTimeout(autoAnswerTimerRef.current);
+              autoAnswerTimerRef.current = null;
+            }
             showToast("Transcript cleared", "info");
           }}
           onOpenSettings={() => setIsSettingsOpen(true)}
@@ -780,6 +907,11 @@ export default function App() {
         onClose={() => setIsResumeModalOpen(false)}
         showToast={showToast}
         onTriggerTestQuestion={(q) => {
+          if (autoAnswerTimerRef.current) {
+            clearTimeout(autoAnswerTimerRef.current);
+            autoAnswerTimerRef.current = null;
+          }
+          lastAutoAnsweredQuestionRef.current = q;
           const item: TranscriptItem = {
             id: crypto.randomUUID(),
             timestamp: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date()),

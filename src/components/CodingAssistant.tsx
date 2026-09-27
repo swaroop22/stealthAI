@@ -33,6 +33,8 @@ interface Props {
   profile: CandidateProfile;
   apiKey?: string;
   aiConfig?: AIProviderConfig;
+  autoAnswer?: boolean;
+  onToggleAutoAnswer?: () => void;
   isRecordingAudio?: boolean;
   recordingSeconds?: number;
   onToggleRecording?: () => void;
@@ -59,6 +61,8 @@ export const CodingAssistant: React.FC<Props> = ({
   activeSnippet,
   apiKey,
   aiConfig,
+  autoAnswer = true,
+  onToggleAutoAnswer,
   isRecordingAudio = false,
   recordingSeconds = 0,
   onToggleRecording,
@@ -201,7 +205,15 @@ export const CodingAssistant: React.FC<Props> = ({
     if (!raw) {
       return (
         <p className="answer-p-line text-slate-400 italic">
-          No answer active. Turn on the mic and speak, then press <strong className="text-white">Ctrl + Enter</strong> to answer.
+          {autoAnswer ? (
+            <>
+              ⚡ <strong className="text-emerald-400">Auto-Answer is ON</strong>. Listening live — when a question is asked, the full answer will appear automatically.
+            </>
+          ) : (
+            <>
+              No answer active. Turn on the mic and speak, then press <strong className="text-white">Ctrl + Enter</strong> to answer.
+            </>
+          )}
         </p>
       );
     }
@@ -270,10 +282,42 @@ export const CodingAssistant: React.FC<Props> = ({
 
           {/* Action Pills */}
           <div className="codingassist-actions-group no-drag">
+            {/* Auto-Answer Indicator & Toggle Pill */}
+            <button
+              className={`codingassist-pill-btn ${autoAnswer ? "codingassist-pill-auto-on" : ""}`}
+              onClick={onToggleAutoAnswer}
+              title={
+                autoAnswer
+                  ? "Auto-Answer is ON (Default): AI automatically answers every question detected without clicking. Click to turn OFF."
+                  : "Auto-Answer is OFF: Click to enable hands-free automatic answering."
+              }
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                paddingLeft: "8px",
+                paddingRight: "8px"
+              }}
+            >
+              <span
+                style={{
+                  width: "7px",
+                  height: "7px",
+                  borderRadius: "50%",
+                  backgroundColor: autoAnswer ? "#10b981" : "#64748b",
+                  boxShadow: autoAnswer ? "0 0 8px #10b981" : "none",
+                  display: "inline-block"
+                }}
+              />
+              <span className="pill-text" style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "0.3px" }}>
+                {autoAnswer ? "AUTO: ON" : "AUTO: OFF"}
+              </span>
+            </button>
+
             <button
               className="codingassist-pill-btn codingassist-pill-answer"
               onClick={() => onTriggerAnswer()}
-              title="Answer current question (Ctrl + Enter)"
+              title="Answer instantly now without waiting for speech pause (Ctrl + Enter)"
             >
               <span className="pill-text">Answer</span>
               <span className="codingassist-kbd">Ctrl ↵</span>
@@ -704,7 +748,15 @@ export const CodingAssistant: React.FC<Props> = ({
                     </div>
                     <div className="answer-main-content">
                       <p className="answer-p-line text-slate-400 italic">
-                        Answer cleared. Turn on the mic and speak, then press <strong className="text-white">Ctrl + Enter</strong> to answer.
+                        {autoAnswer ? (
+                          <>
+                            ⚡ <strong className="text-emerald-400">Auto-Answer is ON</strong>. Listening live — when a question is asked, the answer will appear automatically.
+                          </>
+                        ) : (
+                          <>
+                            Answer cleared. Turn on the mic and speak, then press <strong className="text-white">Ctrl + Enter</strong> to answer.
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>

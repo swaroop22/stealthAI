@@ -13,11 +13,12 @@ const QUESTION_STARTER_REGEX =
 
 // Conversational filler phrases that commonly trail after a question
 const TRAILING_FILLERS = [
-  /([,.\s]+|^)(take\s+your\s+time(\s+and\s+think)?)[\s.!?]*$/i,
+  /([,.\s]+|^)(and\s+)?(take\s+your\s+time(\s+and\s+(think|let\s+me\s+know))?)[\s.!?]*$/i,
   /([,.\s]+|^)(please\s+go\s+ahead|go\s+ahead)[\s.!?]*$/i,
   /([,.\s]+|^)(whenever\s+you('re|'re\s+ready|are\s+ready))[\s.!?]*$/i,
-  /([,.\s]+|^)(let\s+me\s+know(\s+what\s+you\s+think)?)[\s.!?]*$/i,
+  /([,.\s]+|^)(and\s+)?(let\s+me\s+know(\s+what\s+you\s+think)?)[\s.!?]*$/i,
   /([,.\s]+|^)(feel\s+free\s+to\s+start)[\s.!?]*$/i,
+  /([,.\s]+|^)(and|so|then|or|but)[\s.!?]*$/i,
   /([,.\s]+|^)(yeah|yes|okay|ok|alright|sure|cool|great|thanks|thank\s+you)[\s.!?]*$/i,
 ];
 

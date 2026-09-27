@@ -2255,6 +2255,17 @@ pre {
   font-weight: 600;
 }
 
+.codingassist-pill-auto-on {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border-color: rgba(16, 185, 129, 0.6) !important;
+  color: #34d399 !important;
+}
+
+.codingassist-pill-auto-on:hover {
+  background: rgba(16, 185, 129, 0.28) !important;
+  border-color: rgba(16, 185, 129, 0.85) !important;
+}
+
 .codingassist-pill-dashed {
   border: 1px dashed rgba(255, 255, 255, 0.38);
   background: transparent;
