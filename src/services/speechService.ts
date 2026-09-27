@@ -32,6 +32,8 @@ export class SpeechService {
   private static storedOnError: ((err: string) => void) | null = null;
   private static nativeSpeechUnsubscribe: (() => void) | null = null;
   private static usingNativeSpeech: boolean = false;
+  private static nativeAudioLevel: number = 0;
+  private static nativeRestartAttempts: number = 0;
 
   public static isSupported(): boolean {
     return (
@@ -56,6 +58,9 @@ export class SpeechService {
   }
 
   public static getAudioLevel(): number {
+    if (this.usingNativeSpeech && this.nativeAudioLevel > 0) {
+      return this.nativeAudioLevel;
+    }
     if (!this.analyser || !this.dataArray) return 0;
     this.analyser.getByteFrequencyData(this.dataArray as any);
     let sum = 0;
@@ -74,47 +79,9 @@ export class SpeechService {
     this.storedOnFinal = onFinal;
     this.storedOnInterim = onInterim;
     this.storedOnError = onError;
-
-    // 1. Initialize microphone stream for audio visualizer & VAD recording fallback
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        if (!this.mediaStream) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-          this.mediaStream = stream;
-
-          // Initialize AudioContext analyser for audio visualizer & VAD
-          try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-              this.audioCtx = new AudioContextClass();
-              const source = this.audioCtx.createMediaStreamSource(stream);
-              this.analyser = this.audioCtx.createAnalyser();
-              this.analyser.fftSize = 64;
-              this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-              source.connect(this.analyser);
-            }
-          } catch (e) {
-            console.warn("AudioContext analyser init:", e);
-          }
-        }
-      }
-    } catch (micErr: any) {
-      if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
-        onError("Microphone permission was denied. Please allow microphone access in system preferences.");
-        return false;
-      }
-      console.warn("getUserMedia error:", micErr);
-    }
-
     this.isListening = true;
 
-    // 2. Try Native macOS On-Device Speech Recognizer via Electron API first (0ms delay, word-by-word streaming)
+    // 1. Try Native macOS On-Device Speech Recognizer via Electron API first (0ms delay, word-by-word streaming)
     const electron = (window as any).electronAPI;
     if (electron?.startNativeSpeech && electron?.onNativeSpeech && electron.platform === "darwin") {
       try {
@@ -146,38 +113,85 @@ export class SpeechService {
                 this.storedOnInterim("");
               }
             }
+          } else if (data.type === "level") {
+            this.nativeAudioLevel = typeof data.level === "number" ? data.level : 0;
           } else if (data.type === "stopped") {
             if (this.isListening && this.usingNativeSpeech) {
-              console.warn("Native speech helper stopped, auto-restarting in 400ms...");
-              setTimeout(() => {
-                if (this.isListening && this.usingNativeSpeech) {
-                  electron.startNativeSpeech();
-                }
-              }, 400);
+              if (this.nativeRestartAttempts < 2) {
+                this.nativeRestartAttempts++;
+                console.warn(`Native speech helper stopped, restarting (attempt ${this.nativeRestartAttempts})...`);
+                setTimeout(() => {
+                  if (this.isListening && this.usingNativeSpeech) {
+                    electron.startNativeSpeech();
+                  }
+                }, 600);
+              } else {
+                console.warn("Native speech helper stopped repeatedly, falling back to browser audio.");
+                this.usingNativeSpeech = false;
+                this.startBrowserFallback(onFinal, onInterim, onError);
+              }
             }
           } else if (data.type === "error") {
             console.warn("Native speech notice:", data.message);
-            // Auto-fallback to Web Speech API and VAD if native speech encountered an issue
-            if (!this.webSpeechDisabled && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
-              this.createAndStartRecognition();
-              this.startWatchdog();
-            }
-            this.startVADRecording();
+            this.usingNativeSpeech = false;
+            this.startBrowserFallback(onFinal, onInterim, onError);
           }
         });
 
         electron.startNativeSpeech();
         this.usingNativeSpeech = true;
+        this.nativeRestartAttempts = 0;
         return true;
       } catch (nativeErr) {
         console.warn("Native speech start failed, falling back:", nativeErr);
       }
     }
 
-    // 3. Fallback: Start VAD (Voice Activity Detection) recorder for offline/non-Chrome
+    return await this.startBrowserFallback(onFinal, onInterim, onError);
+  }
+
+  private static async startBrowserFallback(
+    onFinal: SpeechCallback,
+    onInterim: InterimCallback,
+    onError: (err: string) => void
+  ): Promise<boolean> {
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        if (!this.mediaStream) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true,
+            },
+          });
+          this.mediaStream = stream;
+
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+              this.audioCtx = new AudioContextClass();
+              const source = this.audioCtx.createMediaStreamSource(stream);
+              this.analyser = this.audioCtx.createAnalyser();
+              this.analyser.fftSize = 64;
+              this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+              source.connect(this.analyser);
+            }
+          } catch (e) {
+            console.warn("AudioContext analyser init:", e);
+          }
+        }
+      }
+    } catch (micErr: any) {
+      if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
+        onError("Microphone permission was denied. Please allow microphone access in system preferences.");
+        return false;
+      }
+      console.warn("getUserMedia error:", micErr);
+    }
+
     this.startVADRecording();
 
-    // 4. If Web Speech API is supported and hasn't permanently failed with network error, attempt it
     if (!this.webSpeechDisabled && ("webkitSpeechRecognition" in window || "SpeechRecognition" in window)) {
       this.createAndStartRecognition();
       this.startWatchdog();
@@ -434,6 +448,8 @@ export class SpeechService {
 
   public static stopListening() {
     this.isListening = false;
+    this.nativeRestartAttempts = 0;
+    this.nativeAudioLevel = 0;
     if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     if (this.vadInterval) clearInterval(this.vadInterval);

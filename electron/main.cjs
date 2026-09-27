@@ -168,9 +168,11 @@ const readline = require('readline');
 const fs = require('fs');
 
 let speechProcess = null;
+let isIntentionalStop = false;
 
 function stopSpeechProcess() {
   if (speechProcess) {
+    isIntentionalStop = true;
     try {
       speechProcess.stdin.write('stop\n');
     } catch (e) {}
@@ -182,7 +184,12 @@ function stopSpeechProcess() {
 }
 
 ipcMain.on('start-native-speech', (event) => {
+  if (speechProcess && !speechProcess.killed) {
+    return;
+  }
+  isIntentionalStop = false;
   stopSpeechProcess();
+  isIntentionalStop = false;
 
   let binPath = null;
   if (app.isPackaged) {
@@ -239,10 +246,10 @@ ipcMain.on('start-native-speech', (event) => {
       console.warn('Native speech helper stderr:', err.toString());
     });
 
-    speechProcess.on('exit', (code) => {
+    speechProcess.on('exit', (code, signal) => {
       speechProcess = null;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('native-speech-event', { type: 'stopped', code });
+      if (!isIntentionalStop && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('native-speech-event', { type: 'stopped', code, signal });
       }
     });
   } catch (err) {

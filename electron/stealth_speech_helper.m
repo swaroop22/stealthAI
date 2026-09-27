@@ -49,33 +49,8 @@ static StealthSpeechEngine *globalEngine = nil;
     if (self.isRunning) return;
 
     [self emitJSON:@{@"type": @"status", @"message": @"starting"}];
-
-    // Explicitly verify microphone and speech recognition authorization
-    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeAudio completionHandler:^(BOOL micGranted) {
-        if (!micGranted) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self emitJSON:@{
-                    @"type": @"error",
-                    @"message": @"Microphone access denied. Please grant microphone access in macOS System Settings > Privacy & Security > Microphone."
-                }];
-            });
-            return;
-        }
-
-        [SFSpeechRecognizer requestAuthorization:^(SFSpeechRecognizerAuthorizationStatus status) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (status == SFSpeechRecognizerAuthorizationStatusAuthorized) {
-                    self.isRunning = YES;
-                    [self setupAndStartAudio];
-                } else {
-                    [self emitJSON:@{
-                        @"type": @"error",
-                        @"message": @"Speech Recognition denied. Please allow Speech Recognition in macOS System Settings > Privacy & Security > Speech Recognition."
-                    }];
-                }
-            });
-        }];
-    }];
+    self.isRunning = YES;
+    [self setupAndStartAudio];
 }
 
 - (void)setupAndStartAudio {
@@ -85,10 +60,35 @@ static StealthSpeechEngine *globalEngine = nil;
 
         [inputNode removeTapOnBus:0];
 
+        AVAudioFormat *tapFormat = nil;
+        if (recordingFormat && recordingFormat.sampleRate > 0 && recordingFormat.channelCount > 0) {
+            tapFormat = recordingFormat;
+        }
+
         __weak typeof(self) weakSelf = self;
-        [inputNode installTapOnBus:0 bufferSize:1024 format:recordingFormat block:^(AVAudioPCMBuffer * _Nonnull buffer, AVAudioTime * _Nonnull when) {
+        __block uint32_t tapCounter = 0;
+        [inputNode installTapOnBus:0 bufferSize:1024 format:tapFormat block:^(AVAudioPCMBuffer * _Nonnull buffer, AVAudioTime * _Nonnull when) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || !strongSelf.isRunning) return;
+
+            // Emit live audio amplitude for visualizer every ~100ms
+            if (++tapCounter % 5 == 0 && buffer.floatChannelData != NULL) {
+                float *channelData = buffer.floatChannelData[0];
+                float sum = 0.0f;
+                AVAudioFrameCount frames = buffer.frameLength;
+                if (frames > 0) {
+                    for (AVAudioFrameCount i = 0; i < frames; i++) {
+                        sum += fabsf(channelData[i]);
+                    }
+                    float avg = sum / (float)frames;
+                    float level = fminf(1.0f, avg * 8.0f);
+                    if (level > 0.01f) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [strongSelf emitJSON:@{@"type": @"level", @"level": @(level)}];
+                        });
+                    }
+                }
+            }
 
             @synchronized (strongSelf) {
                 if (strongSelf.currentRequest) {
@@ -103,9 +103,10 @@ static StealthSpeechEngine *globalEngine = nil;
         }];
 
         NSError *error = nil;
-        [self.audioEngine startAndReturnError:&error];
-        if (error) {
-            [self emitJSON:@{@"type": @"error", @"message": [NSString stringWithFormat:@"Audio Engine error: %@", error.localizedDescription]}];
+        BOOL started = [self.audioEngine startAndReturnError:&error];
+        if (!started || error) {
+            [self emitJSON:@{@"type": @"error", @"message": [NSString stringWithFormat:@"Audio Engine error: %@", error ? error.localizedDescription : @"AudioEngine failed to start"]}];
+            [self stop];
             return;
         }
 
@@ -113,6 +114,7 @@ static StealthSpeechEngine *globalEngine = nil;
         [self startNewRecognitionTask];
     } @catch (NSException *exception) {
         [self emitJSON:@{@"type": @"error", @"message": exception.reason ?: @"Audio Engine exception"}];
+        [self stop];
     }
 }
 
@@ -320,10 +322,22 @@ void sigHandler(int sig) {
     }
 }
 
+void uncaughtExceptionHandler(NSException *exception) {
+    if (globalEngine) {
+        [globalEngine emitJSON:@{
+            @"type": @"error",
+            @"message": [NSString stringWithFormat:@"Crash: %@: %@", exception.name, exception.reason]
+        }];
+        [globalEngine stop];
+    }
+}
+
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         signal(SIGTERM, sigHandler);
         signal(SIGINT, sigHandler);
+        signal(SIGPIPE, SIG_IGN);
+        NSSetUncaughtExceptionHandler(&uncaughtExceptionHandler);
 
         globalEngine = [[StealthSpeechEngine alloc] init];
         [globalEngine start];

@@ -85,7 +85,7 @@ export default function App() {
     return localStorage.getItem("stealthai_gemini_key") || "";
   });
 
-  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [isCapturing, setIsCapturing] = useState<boolean>(true);
   const [interimText, setInterimText] = useState<string>("");
   const [activeSpeaker, setActiveSpeaker] = useState<SpeakerType>("Interviewer");
   const [transcript, setTranscript] = useState<TranscriptItem[]>(DEFAULT_INITIAL_TRANSCRIPT);
@@ -142,6 +142,43 @@ export default function App() {
     localStorage.setItem("stealthai_gemini_key", apiKey);
     SpeechService.setApiKey(apiKey);
   }, [apiKey]);
+
+  // Auto-start speech capture on default launch
+  useEffect(() => {
+    let active = true;
+    const initSpeechOnDefault = async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      if (!active) return;
+
+      SpeechService.setSpeaker(activeSpeaker);
+      SpeechService.setApiKey(apiKey);
+      const success = await SpeechService.startListening(
+        (finalItem) => {
+          if (!active) return;
+          setTranscript((prev) => [...prev, finalItem]);
+          setInterimText("");
+        },
+        (interim) => {
+          if (!active) return;
+          setInterimText(interim);
+        },
+        (err) => {
+          if (!active) return;
+          console.warn("Speech init notice:", err);
+        }
+      );
+
+      if (active) {
+        setIsCapturing(Boolean(success));
+      }
+    };
+
+    initSpeechOnDefault();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Determine mode automatically from prompt
   const detectMode = (prompt: string, currentMode: AssistantMode): AssistantMode => {
