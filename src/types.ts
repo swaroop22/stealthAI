@@ -10,6 +10,15 @@ export interface TranscriptItem {
 
 export type AssistantMode = "coding" | "behavioral" | "system_design" | "meeting_notes";
 
+export type AIProvider = "gemini" | "openai" | "claude" | "perplexity" | "custom_openai";
+
+export interface AIProviderConfig {
+  provider: AIProvider;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}
+
 export interface CandidateProfile {
   name: string;
   targetRole: string;

@@ -18,7 +18,8 @@ import type {
   AIResponse,
   ConsentAudit,
   PresetScenario,
-  SpeakerType
+  SpeakerType,
+  AIProviderConfig
 } from "./types";
 import { AlertCircle, CheckCircle2, LayoutGrid, Layers } from "lucide-react";
 import { extractLastQuestionFromSpeech } from "./utils/speechExtractor";
@@ -81,9 +82,18 @@ export default function App() {
     return saved ? JSON.parse(saved) : DEFAULT_PROFILE;
   });
 
-  const [apiKey, setApiKey] = useState<string>(() => {
-    return localStorage.getItem("stealthai_gemini_key") || "";
+  const [aiConfig, setAIConfig] = useState<AIProviderConfig>(() => {
+    const saved = localStorage.getItem("stealthai_ai_config");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    const legacyKey = localStorage.getItem("stealthai_gemini_key") || "";
+    return AIEngine.normalizeConfig(legacyKey);
   });
+
+  const apiKey = aiConfig.apiKey;
 
   const [isCapturing, setIsCapturing] = useState<boolean>(true);
   const [interimText, setInterimText] = useState<string>("");
@@ -139,9 +149,10 @@ export default function App() {
   }, [profile]);
 
   useEffect(() => {
-    localStorage.setItem("stealthai_gemini_key", apiKey);
-    SpeechService.setApiKey(apiKey);
-  }, [apiKey]);
+    localStorage.setItem("stealthai_ai_config", JSON.stringify(aiConfig));
+    localStorage.setItem("stealthai_gemini_key", aiConfig.apiKey);
+    SpeechService.setAIConfig(aiConfig);
+  }, [aiConfig]);
 
   // Auto-start speech capture on default launch
   useEffect(() => {
@@ -151,7 +162,7 @@ export default function App() {
       if (!active) return;
 
       SpeechService.setSpeaker(activeSpeaker);
-      SpeechService.setApiKey(apiKey);
+      SpeechService.setAIConfig(aiConfig);
       const success = await SpeechService.startListening(
         (finalItem) => {
           if (!active) return;
@@ -241,7 +252,7 @@ export default function App() {
         mode,
         profile,
         activeSnippet,
-        apiKey && apiKey.trim().length > 15 ? apiKey.trim() : "",
+        aiConfig,
         {
           onToken: (_token, accumulated) => {
             setResponses((prev) =>
@@ -319,7 +330,7 @@ export default function App() {
       showToast("Captions paused.", "info");
     } else {
       SpeechService.setSpeaker(activeSpeaker);
-      SpeechService.setApiKey(apiKey);
+      SpeechService.setAIConfig(aiConfig);
       const success = await SpeechService.startListening(
         (finalItem) => {
           setTranscript((prev) => [...prev, finalItem]);
@@ -541,6 +552,7 @@ export default function App() {
           consent={consent}
           profile={profile}
           apiKey={apiKey}
+          aiConfig={aiConfig}
           onToggleCapture={handleToggleCapture}
           onCaptureScreenshot={handleCaptureScreenshot}
           onTriggerAnswer={handleTriggerAnswer}
@@ -693,10 +705,12 @@ export default function App() {
       <SettingsModal
         isOpen={isSettingsOpen}
         profile={profile}
+        aiConfig={aiConfig}
         apiKey={apiKey}
         consent={consent}
         onSaveProfile={(p) => setProfile(p)}
-        onSaveApiKey={(k) => setApiKey(k)}
+        onSaveAIConfig={(cfg) => setAIConfig(cfg)}
+        onSaveApiKey={(k) => setAIConfig((prev) => ({ ...prev, apiKey: k }))}
         onSaveConsent={(c) => setConsent(c)}
         onClose={() => setIsSettingsOpen(false)}
       />

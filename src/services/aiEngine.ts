@@ -1,4 +1,4 @@
-import type { AssistantMode, CandidateProfile, ScreenSnippet } from "../types";
+import type { AssistantMode, CandidateProfile, ScreenSnippet, AIProvider, AIProviderConfig } from "../types";
 
 export interface StreamCallbacks {
   onToken: (token: string, accumulated: string) => void;
@@ -16,12 +16,32 @@ export class AIEngine {
     }
   }
 
+  public static normalizeConfig(configOrKey?: AIProviderConfig | string): AIProviderConfig {
+    if (!configOrKey) {
+      return { provider: "gemini", apiKey: "", model: "gemini-2.5-flash" };
+    }
+    if (typeof configOrKey === "string") {
+      const trimmed = configOrKey.trim();
+      if (trimmed.startsWith("sk-ant-")) {
+        return { provider: "claude", apiKey: trimmed, model: "claude-3-7-sonnet-20250219" };
+      } else if (trimmed.startsWith("pplx-")) {
+        return { provider: "perplexity", apiKey: trimmed, model: "sonar" };
+      } else if (trimmed.startsWith("sk-")) {
+        return { provider: "openai", apiKey: trimmed, model: "gpt-4o" };
+      } else {
+        return { provider: "gemini", apiKey: trimmed, model: "gemini-2.5-flash" };
+      }
+    }
+    return configOrKey;
+  }
+
   private static readonly FLASH_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
     "gemini-3.1-flash-lite",
     "gemini-flash-lite-latest",
-    "gemini-3.5-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash"
+    "gemini-3.5-flash"
   ];
 
   public static async generateStreamingResponse(
@@ -29,7 +49,7 @@ export class AIEngine {
     mode: AssistantMode,
     profile: CandidateProfile,
     snippet: ScreenSnippet | null,
-    apiKey: string,
+    apiKeyOrConfig: AIProviderConfig | string,
     callbacks: StreamCallbacks,
     transcriptContext?: string
   ): Promise<void> {
@@ -37,27 +57,76 @@ export class AIEngine {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    if (apiKey && apiKey.trim().length > 15) {
+    const config = this.normalizeConfig(apiKeyOrConfig);
+
+    if (config.apiKey && config.apiKey.trim().length > 5) {
       try {
-        await this.streamGeminiAPI(prompt, mode, profile, snippet, apiKey.trim(), callbacks, signal, transcriptContext);
-        return;
+        if (config.provider === "openai") {
+          await this.streamOpenAIAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          return;
+        } else if (config.provider === "claude") {
+          await this.streamClaudeAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          return;
+        } else if (config.provider === "perplexity") {
+          await this.streamPerplexityAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          return;
+        } else if (config.provider === "custom_openai") {
+          await this.streamOpenAICompatibleAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          return;
+        } else {
+          // Gemini
+          await this.streamGeminiAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          return;
+        }
       } catch (err: any) {
         if (signal.aborted) return;
         const errMsg = String(err?.message || err);
-        console.warn("Live API call failed, falling back to built-in model engine:", errMsg);
-        if (errMsg.includes("429") || errMsg.includes("quota")) {
-          callbacks.onToken("⚡ *[Notice: Gemini Free Tier rate limit reached. Using built-in engine while quota resets...]*\n\n", "");
-        }
+        console.warn(`Live ${config.provider} API call failed, falling back to built-in model engine:`, errMsg);
+        callbacks.onToken(`⚡ *[Notice: ${config.provider.toUpperCase()} API: ${errMsg}. Using built-in intelligence engine...]*\n\n`, "");
       }
     }
 
     await this.streamLocalEngine(prompt, mode, profile, snippet, callbacks, signal);
   }
 
-  public static async transcribeAudio(blob: Blob, apiKey: string): Promise<string> {
-    if (!apiKey || apiKey.trim().length < 15) {
+  public static async transcribeAudio(blob: Blob, apiKeyOrConfig: AIProviderConfig | string): Promise<string> {
+    const config = this.normalizeConfig(apiKeyOrConfig);
+    if (!config.apiKey || config.apiKey.trim().length < 5) {
       return "";
     }
+
+    // If using OpenAI or Custom OpenAI with whisper support:
+    if (config.provider === "openai" || (config.provider === "custom_openai" && config.apiKey)) {
+      try {
+        let baseUrl = (config.baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
+        if (!baseUrl.endsWith("/v1") && !baseUrl.includes("/v1/")) {
+          baseUrl += "/v1";
+        }
+        const formData = new FormData();
+        const extension = blob.type.includes("mp4") ? "mp4" : "webm";
+        formData.append("file", blob, `speech.${extension}`);
+        formData.append("model", "whisper-1");
+        formData.append("language", "en");
+
+        const response = await fetch(`${baseUrl}/audio/transcriptions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.apiKey.trim()}`
+          },
+          body: formData
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data?.text && data.text.trim()) {
+            return data.text.trim();
+          }
+        }
+      } catch (whisperErr) {
+        console.warn("Whisper transcription failed, falling back:", whisperErr);
+      }
+    }
+
     const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -74,7 +143,7 @@ export class AIEngine {
 
     for (const model of this.FLASH_MODELS) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey.trim()}`;
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -119,16 +188,304 @@ export class AIEngine {
     return "";
   }
 
+  // 1. OpenAI / ChatGPT Streamer (GPT-4o, o3-mini, o1, etc.)
+  private static async streamOpenAIAPI(
+    prompt: string,
+    mode: AssistantMode,
+    profile: CandidateProfile,
+    snippet: ScreenSnippet | null,
+    config: AIProviderConfig,
+    callbacks: StreamCallbacks,
+    signal: AbortSignal,
+    transcriptContext?: string
+  ) {
+    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
+      ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
+      : prompt;
+
+    let userContent: any = fullUserPrompt;
+    if (snippet && snippet.dataUrl) {
+      userContent = [
+        { type: "text", text: fullUserPrompt },
+        { type: "image_url", image_url: { url: snippet.dataUrl } }
+      ];
+    }
+
+    const modelName = config.model || "gpt-4o";
+    const requestBody: any = {
+      model: modelName,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent }
+      ],
+      stream: true
+    };
+    if (!modelName.startsWith("o1") && !modelName.startsWith("o3")) {
+      requestBody.temperature = 0.25;
+    }
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey.trim()}`
+      },
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenAI HTTP ${response.status}: ${errText.slice(0, 140)}`);
+    }
+
+    await this.processSSEStream(response, callbacks, signal, (json) => {
+      return json.choices?.[0]?.delta?.content || "";
+    });
+  }
+
+  // 2. Anthropic Claude Streamer (Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku)
+  private static async streamClaudeAPI(
+    prompt: string,
+    mode: AssistantMode,
+    profile: CandidateProfile,
+    snippet: ScreenSnippet | null,
+    config: AIProviderConfig,
+    callbacks: StreamCallbacks,
+    signal: AbortSignal,
+    transcriptContext?: string
+  ) {
+    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
+      ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
+      : prompt;
+
+    const userContentParts: any[] = [];
+    if (snippet && snippet.dataUrl) {
+      const mimeMatch = snippet.dataUrl.match(/data:([^;]+);/);
+      const mediaType = mimeMatch ? mimeMatch[1] : "image/png";
+      const base64Data = snippet.dataUrl.split(",")[1];
+      userContentParts.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: base64Data
+        }
+      });
+    }
+    userContentParts.push({ type: "text", text: fullUserPrompt });
+
+    const modelName = config.model || "claude-3-7-sonnet-20250219";
+    const requestBody = {
+      model: modelName,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContentParts }],
+      max_tokens: 2048,
+      temperature: 0.25,
+      stream: true
+    };
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey.trim(),
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Claude HTTP ${response.status}: ${errText.slice(0, 140)}`);
+    }
+
+    await this.processSSEStream(response, callbacks, signal, (json) => {
+      if (json.type === "content_block_delta" && json.delta?.type === "text_delta") {
+        return json.delta.text || "";
+      }
+      return "";
+    });
+  }
+
+  // 3. Perplexity AI Streamer (Sonar, Sonar Pro, Sonar Reasoning)
+  private static async streamPerplexityAPI(
+    prompt: string,
+    mode: AssistantMode,
+    profile: CandidateProfile,
+    snippet: ScreenSnippet | null,
+    config: AIProviderConfig,
+    callbacks: StreamCallbacks,
+    signal: AbortSignal,
+    transcriptContext?: string
+  ) {
+    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
+      ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
+      : prompt;
+
+    const modelName = config.model || "sonar";
+    const requestBody = {
+      model: modelName,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: fullUserPrompt }
+      ],
+      temperature: 0.2,
+      stream: true
+    };
+
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey.trim()}`
+      },
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Perplexity HTTP ${response.status}: ${errText.slice(0, 140)}`);
+    }
+
+    await this.processSSEStream(response, callbacks, signal, (json) => {
+      return json.choices?.[0]?.delta?.content || "";
+    });
+  }
+
+  // 4. Custom OpenAI-Compatible Streamer (DeepSeek, Groq, Ollama, OpenRouter, etc.)
+  private static async streamOpenAICompatibleAPI(
+    prompt: string,
+    mode: AssistantMode,
+    profile: CandidateProfile,
+    snippet: ScreenSnippet | null,
+    config: AIProviderConfig,
+    callbacks: StreamCallbacks,
+    signal: AbortSignal,
+    transcriptContext?: string
+  ) {
+    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
+      ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
+      : prompt;
+
+    let userContent: any = fullUserPrompt;
+    if (snippet && snippet.dataUrl) {
+      userContent = [
+        { type: "text", text: fullUserPrompt },
+        { type: "image_url", image_url: { url: snippet.dataUrl } }
+      ];
+    }
+
+    let baseUrl = (config.baseUrl || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
+    if (!baseUrl.endsWith("/v1") && !baseUrl.includes("/v1/")) {
+      baseUrl += "/v1";
+    }
+    const targetUrl = `${baseUrl}/chat/completions`;
+
+    const modelName = config.model || "deepseek-chat";
+    const requestBody: any = {
+      model: modelName,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent }
+      ],
+      stream: true,
+      temperature: 0.25
+    };
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json"
+    };
+    if (config.apiKey && config.apiKey.trim()) {
+      headers["Authorization"] = `Bearer ${config.apiKey.trim()}`;
+    }
+
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestBody),
+      signal
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`API HTTP ${response.status}: ${errText.slice(0, 140)}`);
+    }
+
+    await this.processSSEStream(response, callbacks, signal, (json) => {
+      return json.choices?.[0]?.delta?.content || "";
+    });
+  }
+
+  // 5. Generic SSE Stream consumer helper
+  private static async processSSEStream(
+    response: Response,
+    callbacks: StreamCallbacks,
+    signal: AbortSignal,
+    extractToken: (json: any) => string
+  ) {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("No readable stream received.");
+
+    const decoder = new TextDecoder();
+    let accumulated = "";
+    let lineBuffer = "";
+
+    while (true) {
+      if (signal.aborted) break;
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      lineBuffer += decoder.decode(value, { stream: true });
+      const lines = lineBuffer.split("\n");
+      lineBuffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          const jsonStr = trimmed.slice(6).trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const token = extractToken(parsed);
+            if (token) {
+              accumulated += token;
+              callbacks.onToken(token, accumulated);
+            }
+          } catch (e) {
+            // Ignore partial/non-JSON frame
+          }
+        }
+      }
+    }
+
+    if (accumulated.trim().length > 0) {
+      callbacks.onComplete(accumulated);
+    } else {
+      throw new Error("No text content received from stream.");
+    }
+  }
+
+  // 6. Google Gemini Streamer
   private static async streamGeminiAPI(
     prompt: string,
     mode: AssistantMode,
     profile: CandidateProfile,
     snippet: ScreenSnippet | null,
-    apiKey: string,
+    apiKeyOrConfig: AIProviderConfig | string,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
     transcriptContext?: string
   ) {
+    const config = this.normalizeConfig(apiKeyOrConfig);
+    const apiKey = config.apiKey.trim();
     const systemInstructions = this.buildSystemPrompt(mode, profile);
     const contents: any[] = [];
     const userParts: any[] = [];
@@ -156,8 +513,12 @@ export class AIEngine {
 
     contents.push({ role: "user", parts: userParts });
 
+    const candidateModels = config.model
+      ? [config.model, ...this.FLASH_MODELS.filter((m) => m !== config.model)]
+      : this.FLASH_MODELS;
+
     let lastError: Error | null = null;
-    for (const model of this.FLASH_MODELS) {
+    for (const model of candidateModels) {
       if (signal.aborted) return;
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;

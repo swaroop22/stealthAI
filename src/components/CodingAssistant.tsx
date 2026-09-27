@@ -18,7 +18,7 @@ import {
   LayoutGrid,
   EyeOff
 } from "lucide-react";
-import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem } from "../types";
+import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem, AIProviderConfig } from "../types";
 
 interface Props {
   isCapturing: boolean;
@@ -31,6 +31,7 @@ interface Props {
   consent: ConsentAudit;
   profile: CandidateProfile;
   apiKey?: string;
+  aiConfig?: AIProviderConfig;
   onToggleCapture: () => void;
   onCaptureScreenshot: () => void;
   onTriggerAnswer: (promptOverride?: string) => void;
@@ -44,8 +45,6 @@ interface Props {
   showToast: (text: string, type: "info" | "success" | "error") => void;
 }
 
-
-
 export const CodingAssistant: React.FC<Props> = ({
   isCapturing,
   interimText,
@@ -54,6 +53,7 @@ export const CodingAssistant: React.FC<Props> = ({
   responseHistory,
   activeSnippet,
   apiKey,
+  aiConfig,
   onToggleCapture,
   onCaptureScreenshot,
   onTriggerAnswer,
@@ -137,6 +137,35 @@ export const CodingAssistant: React.FC<Props> = ({
     setCopiedQuestion(true);
     setTimeout(() => setCopiedQuestion(false), 1800);
     showToast("Question copied", "info");
+  };
+
+  const providerIcon =
+    aiConfig?.provider === "openai" ? "🤖" :
+    aiConfig?.provider === "claude" ? "🧠" :
+    aiConfig?.provider === "perplexity" ? "🔍" :
+    aiConfig?.provider === "custom_openai" ? "⚡" : "✨";
+
+  const getModelLabel = () => {
+    if (!aiConfig?.model) return "Gemini 2.5";
+    const m = aiConfig.model;
+    if (m.includes("gpt-4o-mini")) return "GPT-4o Mini";
+    if (m.includes("gpt-4o")) return "GPT-4o";
+    if (m.includes("o3-mini")) return "o3-mini";
+    if (m.includes("o1")) return "o1";
+    if (m.includes("gpt-4.5")) return "GPT-4.5";
+    if (m.includes("claude-3-7-sonnet")) return "Claude 3.7";
+    if (m.includes("claude-3-5-sonnet")) return "Claude 3.5";
+    if (m.includes("claude-3-5-haiku")) return "Claude Haiku";
+    if (m.includes("sonar-pro")) return "Sonar Pro";
+    if (m.includes("sonar-reasoning")) return "Sonar Reason";
+    if (m.includes("sonar")) return "Sonar";
+    if (m.includes("deepseek-chat")) return "DeepSeek V3";
+    if (m.includes("deepseek-reasoner") || m.includes("deepseek-r1")) return "DeepSeek R1";
+    if (m.includes("llama-3.3-70b")) return "Groq LLaMA";
+    if (m.includes("gemini-2.5-flash")) return "Gemini 2.5";
+    if (m.includes("gemini-2.0-flash")) return "Gemini 2.0";
+    if (m.includes("gemini-1.5-pro")) return "Gemini 1.5 Pro";
+    return m.length > 12 ? m.slice(0, 10) + "…" : m;
   };
 
   const handleChatSubmit = (e: React.FormEvent) => {
@@ -257,6 +286,26 @@ export const CodingAssistant: React.FC<Props> = ({
             >
               <span className="pill-text">Chat</span>
               <span className="codingassist-kbd">Ctrl ⇧ ...</span>
+            </button>
+
+            {/* AI Model Badge Pill */}
+            <button
+              className="codingassist-pill-btn"
+              onClick={onOpenSettings}
+              title={`Active AI: ${getModelLabel()} (${aiConfig?.provider || "gemini"}). Click to change model or provider.`}
+              style={{
+                background: "rgba(56, 189, 248, 0.08)",
+                borderColor: "rgba(56, 189, 248, 0.35)",
+                color: "#38bdf8",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                paddingLeft: "7px",
+                paddingRight: "7px"
+              }}
+            >
+              <span style={{ fontSize: "11px" }}>{providerIcon}</span>
+              <span className="pill-text" style={{ fontWeight: 600 }}>{getModelLabel()}</span>
             </button>
           </div>
 

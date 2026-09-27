@@ -23,6 +23,7 @@ export class SpeechService {
   private static silenceCounter: number = 0;
   private static speechDurationCounter: number = 0;
   private static apiKey: string = "";
+  private static aiConfig: any = null;
   private static webSpeechDisabled: boolean = false;
   private static hasNotifiedFallback: boolean = false;
 
@@ -45,8 +46,18 @@ export class SpeechService {
     );
   }
 
-  public static setApiKey(key: string) {
-    this.apiKey = key;
+  public static setApiKey(keyOrConfig: any) {
+    if (typeof keyOrConfig === "string") {
+      this.apiKey = keyOrConfig;
+      this.aiConfig = keyOrConfig;
+    } else if (keyOrConfig && typeof keyOrConfig === "object") {
+      this.apiKey = keyOrConfig.apiKey || "";
+      this.aiConfig = keyOrConfig;
+    }
+  }
+
+  public static setAIConfig(config: any) {
+    this.setApiKey(config);
   }
 
   public static setSpeaker(speaker: SpeakerType) {
@@ -392,13 +403,14 @@ export class SpeechService {
       // Process if speech was sustained (> 0.4 seconds)
       if (durationTicks >= 4 && audioBlob.size > 1024) {
         if (this.webSpeechDisabled) {
-          const hasApiKey = Boolean(this.apiKey && this.apiKey.trim().length > 15);
+          const cfg = AIEngine.normalizeConfig(this.aiConfig || this.apiKey);
+          const hasApiKey = Boolean(cfg.apiKey && cfg.apiKey.trim().length > 5);
           if (hasApiKey) {
             if (this.storedOnInterim) {
-              this.storedOnInterim("⚡ Transcribing audio with Gemini AI...");
+              this.storedOnInterim(`⚡ Transcribing audio with ${cfg.provider.toUpperCase()}...`);
             }
             try {
-              const transcribed = await AIEngine.transcribeAudio(audioBlob, this.apiKey);
+              const transcribed = await AIEngine.transcribeAudio(audioBlob, cfg);
               if (this.storedOnInterim) this.storedOnInterim("");
               if (transcribed && transcribed.trim().length > 0 && this.storedOnFinal) {
                 this.storedOnFinal({
