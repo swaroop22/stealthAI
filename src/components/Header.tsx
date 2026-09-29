@@ -30,7 +30,7 @@ export const Header: React.FC<Props> = ({
         <div>
           <div className="brand-title-row">
             <h1>StealthAI</h1>
-            <span className="version-pill">v4.0.0 Pro Edition</span>
+            <span className="version-pill">v5.0.0 Pro Edition</span>
           </div>
           <p className="brand-tagline">
             Consented Real-Time Meeting, Coding & Resume-Grounded Technical Companion

@@ -15,6 +15,7 @@ release
 .env
 .env.*
 .stealthai_config.json
+coverage
 
 # Editor directories and files
 .vscode/*

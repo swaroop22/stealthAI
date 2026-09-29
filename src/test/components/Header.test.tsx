@@ -36,7 +36,7 @@ describe("<Header />", () => {
     render(<Header {...defaultProps} />);
 
     expect(screen.getByText("StealthAI")).toBeInTheDocument();
-    expect(screen.getByText("v4.0.0 Pro Edition")).toBeInTheDocument();
+    expect(screen.getByText("v5.0.0 Pro Edition")).toBeInTheDocument();
     expect(screen.getByText("CAPTURING AUDIO (VISIBLE)")).toBeInTheDocument();
   });
 
