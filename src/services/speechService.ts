@@ -39,12 +39,12 @@ export class SpeechService {
   private static lastNativeActivityTime: number = 0;
 
   public static isSupported(): boolean {
-    return (
+    return Boolean(
       typeof window !== "undefined" &&
-      (Boolean((window as any).electronAPI?.startNativeSpeech) ||
+      ((window as any).electronAPI?.startNativeSpeech ||
         "webkitSpeechRecognition" in window ||
         "SpeechRecognition" in window ||
-        (navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia))
+        navigator.mediaDevices?.getUserMedia)
     );
   }
 

@@ -910,18 +910,6 @@ export class AIEngine {
 
     // 5. DATA ENGINEERING & CLOUD
 
-    // Apache Spark / PySpark / Databricks
-    if (p.includes("spark") || p.includes("databricks") || p.includes("pyspark") || p.includes("shuffle") || p.includes("skew") || p.includes("partition")) {
-      return [
-        "⭐ **Apache Spark & Databricks — Core Architecture & Optimization:**",
-        "",
-        "• **Driver vs Executor Execution:** Driver analyzes the DAG, optimizes via Catalyst Optimizer, and schedules tasks across Executor worker JVMs.",
-        "• **Shuffle Spill & Remediation:** Shuffle spill (Memory to Disk) happens when executor memory is overwhelmed during wide transformations (`groupBy`, `join`). Fix by increasing `spark.sql.shuffle.partitions`, enabling Adaptive Query Execution (`spark.sql.adaptive.enabled = true`), or salting skewed keys.",
-        "• **Data Skew Strategies:** Broadcast smaller tables (`broadcast(df)`) to bypass shuffle entirely; for skewed large joins, append a random salt key `0..N-1` to distribute partition hotspots evenly.",
-        "• **Storage & Lakehouse:** Delta Lake uses Parquet data files with an ACID transaction log (`_delta_log`), enabling `OPTIMIZE` file compaction, `Z-ORDER` clustering for multi-column skip indexing, and Time Travel."
-      ].join("\n");
-    }
-
     // Apache Kafka
     if (p.includes("kafka") || p.includes("streaming") || p.includes("event-driven") || p.includes("consumer lag")) {
       return [
@@ -931,6 +919,18 @@ export class AIEngine {
         "• **Consumer Lag Triage:** Lag occurs when consumption rate < production rate. Address by increasing topic partitions and matching consumer instances up to partition count, tuning `max.poll.records`, or optimizing downstream processing.",
         "• **Exactly-Once Semantics (EOS):** Achieved via idempotent producer (`enable.idempotence=true` with transactional IDs) combined with `read_committed` consumer isolation.",
         "• **Fault Tolerance & ISR:** In-Sync Replicas (`min.insync.replicas=2`, `acks=all`) prevent data loss during broker failovers."
+      ].join("\n");
+    }
+
+    // Apache Spark / PySpark / Databricks
+    if (p.includes("spark") || p.includes("databricks") || p.includes("pyspark") || p.includes("shuffle") || p.includes("skew") || p.includes("partition")) {
+      return [
+        "⭐ **Apache Spark & Databricks — Core Architecture & Optimization:**",
+        "",
+        "• **Driver vs Executor Execution:** Driver analyzes the DAG, optimizes via Catalyst Optimizer, and schedules tasks across Executor worker JVMs.",
+        "• **Shuffle Spill & Remediation:** Shuffle spill (Memory to Disk) happens when executor memory is overwhelmed during wide transformations (`groupBy`, `join`). Fix by increasing `spark.sql.shuffle.partitions`, enabling Adaptive Query Execution (`spark.sql.adaptive.enabled = true`), or salting skewed keys.",
+        "• **Data Skew Strategies:** Broadcast smaller tables (`broadcast(df)`) to bypass shuffle entirely; for skewed large joins, append a random salt key `0..N-1` to distribute partition hotspots evenly.",
+        "• **Storage & Lakehouse:** Delta Lake uses Parquet data files with an ACID transaction log (`_delta_log`), enabling `OPTIMIZE` file compaction, `Z-ORDER` clustering for multi-column skip indexing, and Time Travel."
       ].join("\n");
     }
 

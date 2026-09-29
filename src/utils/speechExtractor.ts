@@ -135,6 +135,7 @@ export function extractLastQuestionFromSpeech(
         const prevTurn = tailTurns[tIdx + 1];
         const prevClean = cleanTrailingFillers(prevTurn.text.trim());
         if (
+          prevTurn.speaker === turn.speaker &&
           prevClean.length > 5 &&
           !isStandaloneFiller(prevClean) &&
           !prevClean.includes("?") &&
