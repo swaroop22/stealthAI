@@ -527,7 +527,7 @@ export class AIEngine {
             systemInstruction: { parts: [{ text: systemInstructions }] },
             contents,
             generationConfig: {
-              temperature: 0.25,
+              temperature: 0.35,
               maxOutputTokens: 2048
             }
           }),
@@ -676,10 +676,11 @@ export class AIEngine {
     }
 
     lines.push("CRITICAL ANSWER RULES:");
-    lines.push("1. DIRECT RELEVANCE: Answer the specific question immediately and concisely. Never give generic filler or dodge the question.");
-    lines.push("2. INTERVIEW FORMAT: Structure answers with crisp bullet points, bold key terms, and exact technical explanations that the user can speak comfortably in an interview.");
-    lines.push("3. CODE EXAMPLES: When asked for code or SQL, provide clean, idiomatic code with minimal, clear comments.");
-    lines.push("4. CANDIDATE PERSONALIZATION: When asked about past experience or behavioral (STAR) questions, strictly ground the answer in the candidate's actual resume projects and metrics.");
+    lines.push("1. DIRECT RELEVANCE & ACCURACY: Answer the EXACT question or topic asked. If the prompt is a technical term or concept from the interview transcript, explain that specific concept with precision.");
+    lines.push("2. DO NOT REPEAT RESUME INTROS: NEVER talk about AWS, Terraform, or generic microservices unless the question is explicitly about your past work, cloud infrastructure, or behavioral background (e.g. 'Tell me about yourself', 'Walk me through your resume', 'What did you build at your last company?').");
+    lines.push("3. NO DUPLICATE BOILERPLATE: If asked about general concepts, algorithms, SQL, Python, or data engineering, answer the technical mechanics, trade-offs, architecture, and code directly without unnecessary introductory filler.");
+    lines.push("4. INTERVIEW FORMAT: Structure answers with crisp bullet points, bold key terms, and exact technical explanations that the user can speak comfortably in an interview.");
+    lines.push("5. CONTEXT DISAMBIGUATION: If the prompt is brief or conversational, examine the RECENT INTERVIEW CONVERSATION to determine the actual topic the interviewer was asking about and answer that directly.");
     return lines.join("\n");
   }
 

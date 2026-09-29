@@ -103,8 +103,8 @@ export function extractLastQuestionFromSpeech(
     });
   }
 
-  // Add the last 6 turns in reverse chronological order (latest first)
-  const maxRecent = Math.min(validItems.length, 6);
+  // Add the last 15 turns in reverse chronological order (latest first)
+  const maxRecent = Math.min(validItems.length, 15);
   for (let i = validItems.length - 1; i >= validItems.length - maxRecent; i--) {
     tailTurns.push({
       text: validItems[i].text.trim(),
@@ -118,7 +118,8 @@ export function extractLastQuestionFromSpeech(
   }
 
   // 1. First pass: Examine turns from the END backwards for explicit questions or prompts
-  for (const turn of tailTurns) {
+  for (let tIdx = 0; tIdx < tailTurns.length; tIdx++) {
+    const turn = tailTurns[tIdx];
     const raw = turn.text.trim();
     if (!raw || isStandaloneFiller(raw)) continue;
 
@@ -128,11 +129,25 @@ export function extractLastQuestionFromSpeech(
 
     // If the turn contains a question or starter:
     if (hasQuestionMark || hasQuestionStarter) {
-      // If the turn is a cohesive utterance under 400 characters, KEEP THE WHOLE TURN
-      // to preserve problem setup, context, and technology references!
-      if (cleanedTurn.length <= 400) {
+      // Check if the previous chronological turn (tIdx + 1 in reverse order) sets up the context
+      let fullQ = cleanedTurn;
+      if (tIdx + 1 < tailTurns.length) {
+        const prevTurn = tailTurns[tIdx + 1];
+        const prevClean = cleanTrailingFillers(prevTurn.text.trim());
+        if (
+          prevClean.length > 5 &&
+          !isStandaloneFiller(prevClean) &&
+          !prevClean.includes("?") &&
+          !QUESTION_STARTER_REGEX.test(prevClean) &&
+          (prevClean.endsWith(",") || prevClean.endsWith(":") || prevClean.length < 120)
+        ) {
+          fullQ = `${prevClean} ${cleanedTurn}`;
+        }
+      }
+
+      if (fullQ.length <= 400) {
         return {
-          question: formatAsQuestion(cleanedTurn),
+          question: formatAsQuestion(fullQ),
           sourceSpeaker: turn.speaker,
           timestamp: turn.timestamp,
           fullTranscriptText
@@ -140,13 +155,12 @@ export function extractLastQuestionFromSpeech(
       }
 
       // If the turn is very long, extract the question sentence and its preceding context sentence
-      const sentences = cleanedTurn.match(/[^.!?\n]+[.!?\n]*/g) || [cleanedTurn];
+      const sentences = fullQ.match(/[^.!?\n]+[.!?\n]*/g) || [fullQ];
       for (let sIdx = sentences.length - 1; sIdx >= 0; sIdx--) {
         const sentence = sentences[sIdx].trim();
         if (!sentence || isStandaloneFiller(sentence)) continue;
 
         if (sentence.includes("?") || QUESTION_STARTER_REGEX.test(sentence)) {
-          // If there is an immediate preceding sentence that sets the context, include it
           let combined = sentence;
           if (sIdx > 0) {
             const prev = sentences[sIdx - 1].trim();
@@ -165,14 +179,18 @@ export function extractLastQuestionFromSpeech(
     }
   }
 
-  // 2. Second pass: Fallback to the latest substantive spoken phrase from the end
+  // 2. Second pass: Fallback to the latest substantive spoken phrase ONLY if it has real technical or actionable substance
+  const TECHNICAL_OR_ACTION_REGEX =
+    /\b(explain|implement|optimize|design|architecture|database|sql|table|index|query|join|api|service|microservices|rest|http|docker|kubernetes|container|memory|thread|concurrency|async|sync|cache|redis|kafka|queue|stream|spark|databricks|snowflake|aws|python|java|golang|react|node|algorithm|structure|latency|throughput|scaling|partition|sharding|cluster|deploy|ci\/cd|pipeline|terraform|security|auth|jwt|token|test|debug)\b/i;
+
   for (const turn of tailTurns) {
     const raw = turn.text.trim();
     if (!raw || isStandaloneFiller(raw)) continue;
 
     const cleaned = cleanTrailingFillers(raw);
     const words = cleaned.split(/\s+/).filter(Boolean);
-    if (words.length >= 3) {
+    // Require substantive technical phrasing or at least 5 meaningful words to prevent noise fragments
+    if (words.length >= 3 && (TECHNICAL_OR_ACTION_REGEX.test(cleaned) || words.length >= 5)) {
       return {
         question: formatAsQuestion(cleaned),
         sourceSpeaker: turn.speaker,
@@ -182,10 +200,11 @@ export function extractLastQuestionFromSpeech(
     }
   }
 
-  // 3. Absolute fallback: the latest turn text
+  // 3. Absolute fallback: the latest turn text if it has at least 2 words
   const lastTurn = tailTurns[0];
+  const lastClean = cleanTrailingFillers(lastTurn?.text || "");
   return {
-    question: cleanTrailingFillers(lastTurn?.text || ""),
+    question: lastClean.split(/\s+/).length >= 2 ? formatAsQuestion(lastClean) : "",
     sourceSpeaker: lastTurn?.speaker,
     timestamp: lastTurn?.timestamp,
     fullTranscriptText

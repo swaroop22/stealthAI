@@ -193,7 +193,11 @@ static StealthSpeechEngine *globalEngine = nil;
             if (result) {
                 NSString *fullTranscript = result.bestTranscription.formattedString;
                 if (fullTranscript.length > 0) {
-                    NSString *turnText = [fullTranscript stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                    NSString *cleanText = [fullTranscript stringByReplacingOccurrencesOfString:@"</S>" withString:@""];
+                    cleanText = [cleanText stringByReplacingOccurrencesOfString:@"<s>" withString:@""];
+                    cleanText = [cleanText stringByReplacingOccurrencesOfString:@"</s>" withString:@""];
+                    cleanText = [cleanText stringByReplacingOccurrencesOfString:@"[BLANK_AUDIO]" withString:@""];
+                    NSString *turnText = [cleanText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
                     if (turnText.length > 0) {
                         strongSelf.lastEmittedInterim = turnText;
@@ -202,9 +206,9 @@ static StealthSpeechEngine *globalEngine = nil;
                             @"text": turnText
                         }];
 
-                        // Continuous speaking guard: If user talks unbroken for > 20s, commit and refresh
+                        // Continuous speaking guard: If user talks unbroken for > 25s, commit and refresh
                         NSTimeInterval elapsed = [[NSDate date] timeIntervalSinceDate:strongSelf.taskStartTime];
-                        if (elapsed >= 20.0) {
+                        if (elapsed >= 25.0) {
                             [strongSelf emitJSON:@{
                                 @"type": @"final",
                                 @"text": turnText
@@ -214,9 +218,9 @@ static StealthSpeechEngine *globalEngine = nil;
                             return;
                         }
 
-                        // Natural conversational pause: finalize turn after 1.2s of silence
+                        // Natural conversational pause: finalize turn after 1.8s of silence (allows natural thinking pauses)
                         [strongSelf.silenceTimer invalidate];
-                        strongSelf.silenceTimer = [NSTimer scheduledTimerWithTimeInterval:1.2 repeats:NO block:^(NSTimer * _Nonnull timer) {
+                        strongSelf.silenceTimer = [NSTimer scheduledTimerWithTimeInterval:1.8 repeats:NO block:^(NSTimer * _Nonnull timer) {
                             __strong typeof(weakSelf) sSelf = weakSelf;
                             if (!sSelf || !sSelf.isRunning || sSelf.currentTaskId != thisTaskId) return;
 
@@ -229,7 +233,7 @@ static StealthSpeechEngine *globalEngine = nil;
                                 sSelf.lastEmittedInterim = @"";
                             }
 
-                            // Refresh task cleanly between utterances to guarantee infinite continuous listening
+                            // Refresh task cleanly between utterances to guarantee continuous listening
                             [sSelf refreshTaskCleanly];
                         }];
                     }
