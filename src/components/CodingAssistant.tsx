@@ -17,7 +17,9 @@ import {
   X,
   LayoutGrid,
   EyeOff,
-  Folder
+  Folder,
+  Zap,
+  Disc
 } from "lucide-react";
 import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem, AIProviderConfig } from "../types";
 
@@ -116,7 +118,7 @@ export const CodingAssistant: React.FC<Props> = ({
     const electron = (window as any).electronAPI;
     if (electron?.resizeWindow) {
       if (isCardCollapsed) {
-        electron.resizeWindow(840, 75);
+        electron.resizeWindow(920, 75);
       } else {
         electron.resizeWindow(920, 520);
       }
@@ -259,14 +261,14 @@ export const CodingAssistant: React.FC<Props> = ({
         
         {/* TOP HUD BAR */}
         <div className="codingassist-hud-top">
-          {/* Left Indicator Buttons: Screen and Mic */}
+          {/* Left Indicator Buttons: Screen, Mic & Auto-Answer Toggle */}
           <div className="codingassist-indicators-group no-drag">
             <button
               className={`codingassist-status-icon-btn ${activeSnippet ? "recording" : ""}`}
               onClick={onCaptureScreenshot}
               title={activeSnippet ? "Screen Captured (Click to update)" : "Capture Screen"}
             >
-              <Monitor size={17} />
+              <Monitor size={16} />
               <span className="codingassist-red-badge-dot" />
             </button>
 
@@ -275,45 +277,27 @@ export const CodingAssistant: React.FC<Props> = ({
               onClick={onToggleCapture}
               title={isCapturing ? "Microphone Active (Click to mute)" : "Start Listening"}
             >
-              <Mic size={17} />
+              <Mic size={16} />
               <span className="codingassist-red-badge-dot" />
+            </button>
+
+            {/* Compact Auto-Answer Toggle */}
+            <button
+              className={`codingassist-auto-toggle-btn ${autoAnswer ? "active" : ""}`}
+              onClick={onToggleAutoAnswer}
+              title={
+                autoAnswer
+                  ? "Auto-Answer: ON (AI automatically answers every question detected without clicking). Click to turn OFF."
+                  : "Auto-Answer: OFF. Click to enable hands-free automatic answering."
+              }
+            >
+              <Zap size={12} className={autoAnswer ? "text-emerald-400" : "text-slate-400"} />
+              <span>{autoAnswer ? "Auto" : "Auto Off"}</span>
             </button>
           </div>
 
           {/* Action Pills */}
           <div className="codingassist-actions-group no-drag">
-            {/* Auto-Answer Indicator & Toggle Pill */}
-            <button
-              className={`codingassist-pill-btn ${autoAnswer ? "codingassist-pill-auto-on" : ""}`}
-              onClick={onToggleAutoAnswer}
-              title={
-                autoAnswer
-                  ? "Auto-Answer is ON (Default): AI automatically answers every question detected without clicking. Click to turn OFF."
-                  : "Auto-Answer is OFF: Click to enable hands-free automatic answering."
-              }
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                paddingLeft: "8px",
-                paddingRight: "8px"
-              }}
-            >
-              <span
-                style={{
-                  width: "7px",
-                  height: "7px",
-                  borderRadius: "50%",
-                  backgroundColor: autoAnswer ? "#10b981" : "#64748b",
-                  boxShadow: autoAnswer ? "0 0 8px #10b981" : "none",
-                  display: "inline-block"
-                }}
-              />
-              <span className="pill-text" style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "0.3px" }}>
-                {autoAnswer ? "AUTO: ON" : "AUTO: OFF"}
-              </span>
-            </button>
-
             <button
               className="codingassist-pill-btn codingassist-pill-answer"
               onClick={() => onTriggerAnswer()}
@@ -338,62 +322,17 @@ export const CodingAssistant: React.FC<Props> = ({
               title="Toggle Custom Prompt (Ctrl + Shift + Backspace)"
             >
               <span className="pill-text">Chat</span>
-              <span className="codingassist-kbd">Ctrl ⇧ ...</span>
+              <span className="codingassist-kbd">Ctrl ⇧ …</span>
             </button>
 
             {/* AI Model Badge Pill */}
             <button
-              className="codingassist-pill-btn"
+              className="codingassist-pill-btn codingassist-pill-model"
               onClick={onOpenSettings}
               title={`Active AI: ${getModelLabel()} (${aiConfig?.provider || "gemini"}). Click to change model or provider.`}
-              style={{
-                background: "rgba(56, 189, 248, 0.08)",
-                borderColor: "rgba(56, 189, 248, 0.35)",
-                color: "#38bdf8",
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                paddingLeft: "7px",
-                paddingRight: "7px"
-              }}
             >
-              <span style={{ fontSize: "11px" }}>{providerIcon}</span>
-              <span className="pill-text" style={{ fontWeight: 600 }}>{getModelLabel()}</span>
-            </button>
-
-            {/* Audio Recording to Computer Indicator Pill */}
-            <button
-              className="codingassist-pill-btn"
-              onClick={onToggleRecording}
-              title={
-                isRecordingAudio
-                  ? `Recording session audio (${formatTimer(recordingSeconds)}). Saved live to ~/Documents/StealthAI_Recordings. Click to pause.`
-                  : "Audio recording paused. Click to resume recording."
-              }
-              style={{
-                background: isRecordingAudio ? "rgba(239, 68, 68, 0.16)" : "rgba(255, 255, 255, 0.04)",
-                borderColor: isRecordingAudio ? "rgba(239, 68, 68, 0.6)" : "rgba(255, 255, 255, 0.12)",
-                color: isRecordingAudio ? "#fca5a5" : "#94a3b8",
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                paddingLeft: "7px",
-                paddingRight: "7px"
-              }}
-            >
-              <span
-                style={{
-                  width: "7px",
-                  height: "7px",
-                  borderRadius: "50%",
-                  backgroundColor: isRecordingAudio ? "#ef4444" : "#64748b",
-                  boxShadow: isRecordingAudio ? "0 0 8px #ef4444" : "none",
-                  display: "inline-block"
-                }}
-              />
-              <span className="pill-text" style={{ fontWeight: 700, fontSize: "11px", letterSpacing: "0.4px" }}>
-                {isRecordingAudio ? `REC ${formatTimer(recordingSeconds)}` : "REC PAUSED"}
-              </span>
+              <span className="model-icon" style={{ fontSize: "11px" }}>{providerIcon}</span>
+              <span className="pill-text">{getModelLabel()}</span>
             </button>
           </div>
 
@@ -426,6 +365,19 @@ export const CodingAssistant: React.FC<Props> = ({
               <EyeOff size={15} />
             </button>
 
+            {/* Disk Audio Recording Toggle Button */}
+            <button
+              className={`codingassist-tool-icon-btn ${isRecordingAudio ? "rec-active" : ""}`}
+              onClick={onToggleRecording}
+              title={
+                isRecordingAudio
+                  ? `Recording session audio (${formatTimer(recordingSeconds)}). Saved to ~/Documents/StealthAI_Recordings. Click to pause.`
+                  : "Record session audio to computer drive. Click to start."
+              }
+            >
+              <Disc size={15} className={isRecordingAudio ? "text-red-500 animate-pulse" : ""} />
+            </button>
+
             <div className="codingassist-menu-relative">
               <button
                 className="codingassist-tool-icon-btn"
@@ -451,6 +403,26 @@ export const CodingAssistant: React.FC<Props> = ({
                   <button
                     onClick={() => {
                       setIsMoreMenuOpen(false);
+                      if (onToggleRecording) onToggleRecording();
+                    }}
+                    title="Record live session audio to computer drive"
+                  >
+                    <Disc size={15} className={isRecordingAudio ? "text-red-500 animate-pulse" : ""} />
+                    <span>{isRecordingAudio ? `Stop Recording (${formatTimer(recordingSeconds)})` : "Record Session Audio"}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
+                      if (onOpenRecordingsFolder) onOpenRecordingsFolder();
+                    }}
+                    title="Open ~/Documents/StealthAI_Recordings folder on your computer"
+                  >
+                    <Folder size={15} />
+                    <span>Open Recordings Folder</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsMoreMenuOpen(false);
                       onOpenResumeModal();
                     }}
                   >
@@ -465,16 +437,6 @@ export const CodingAssistant: React.FC<Props> = ({
                   >
                     <Settings size={15} />
                     <span>Settings & API Key</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsMoreMenuOpen(false);
-                      if (onOpenRecordingsFolder) onOpenRecordingsFolder();
-                    }}
-                    title="Open ~/Documents/StealthAI_Recordings folder on your computer"
-                  >
-                    <Folder size={15} />
-                    <span>Open Recordings Folder</span>
                   </button>
                   <button
                     onClick={() => {
@@ -498,7 +460,7 @@ export const CodingAssistant: React.FC<Props> = ({
               )}
             </div>
 
-            {/* Red Session Timer Button (e.g. 5:57) */}
+            {/* Red Session Timer Button (e.g. 14:38) */}
             <button
               className="codingassist-timer-btn"
               onClick={handleEndApp}

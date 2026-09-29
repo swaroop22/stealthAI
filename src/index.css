@@ -2138,7 +2138,7 @@ pre {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(4px, 0.8vw, 10px);
+  gap: 8px;
   background: rgba(28, 31, 37, 0.96);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
@@ -2150,7 +2150,7 @@ pre {
   max-width: 900px;
   box-sizing: border-box;
   -webkit-app-region: drag;
-  overflow: visible;
+  position: relative;
 }
 
 .no-drag,
@@ -2183,14 +2183,15 @@ pre {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: transparent;
   border: none;
   color: #94a3b8;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .codingassist-status-icon-btn:hover {
@@ -2213,31 +2214,64 @@ pre {
   box-shadow: 0 0 6px #ef4444;
 }
 
+.codingassist-auto-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  color: #94a3b8;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 26px;
+}
+
+.codingassist-auto-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+
+.codingassist-auto-toggle-btn.active {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.55);
+  color: #34d399;
+}
+
+.codingassist-auto-toggle-btn.active:hover {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.8);
+}
+
 /* Actions Group */
 .codingassist-actions-group {
   display: flex;
   align-items: center;
-  gap: clamp(4px, 0.7vw, 8px);
-  flex: 1 1 auto;
+  gap: 6px;
+  flex: 0 0 auto;
   justify-content: center;
-  min-width: 0;
 }
 
 .codingassist-pill-btn {
   display: inline-flex;
   align-items: center;
-  gap: clamp(3px, 0.5vw, 6px);
+  gap: 5px;
   background: rgba(45, 49, 57, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 9999px;
   color: #f8fafc;
-  padding: 5px clamp(8px, 1vw, 12px);
-  font-size: clamp(12px, 0.95vw, 13px);
+  padding: 5px 10px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
-  flex-shrink: 1;
+  flex-shrink: 0;
 }
 
 .codingassist-pill-btn:hover {
@@ -2255,15 +2289,17 @@ pre {
   font-weight: 600;
 }
 
-.codingassist-pill-auto-on {
-  background: rgba(16, 185, 129, 0.18) !important;
-  border-color: rgba(16, 185, 129, 0.6) !important;
-  color: #34d399 !important;
+.codingassist-pill-model {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+  font-weight: 600;
 }
 
-.codingassist-pill-auto-on:hover {
-  background: rgba(16, 185, 129, 0.28) !important;
-  border-color: rgba(16, 185, 129, 0.85) !important;
+.codingassist-pill-model:hover {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #7dd3fc;
 }
 
 .codingassist-pill-dashed {
@@ -2278,13 +2314,13 @@ pre {
 
 .codingassist-kbd {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "JetBrains Mono", sans-serif;
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: -0.2px;
   color: #94a3b8;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 5px;
-  padding: 1px 5px;
+  border-radius: 4px;
+  padding: 1px 4px;
   line-height: 1.2;
 }
 
@@ -2292,7 +2328,7 @@ pre {
 .codingassist-controls-group {
   display: flex;
   align-items: center;
-  gap: clamp(3px, 0.5vw, 6px);
+  gap: 4px;
   margin-left: 2px;
   flex-shrink: 0;
 }
@@ -2301,8 +2337,8 @@ pre {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: transparent;
   border: none;
@@ -2317,24 +2353,15 @@ pre {
   background: rgba(255, 255, 255, 0.08);
 }
 
-.codingassist-end-btn {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.95) 0%, rgba(220, 38, 38, 0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 9999px;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 12px;
-  cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.35);
-  flex-shrink: 0;
+.codingassist-tool-icon-btn.rec-active {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
 }
 
-.codingassist-end-btn:hover {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+.codingassist-tool-icon-btn.rec-active:hover {
+  background: rgba(239, 68, 68, 0.25);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
 }
 
 /* More menu dropdown */
