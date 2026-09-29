@@ -9,5 +9,11 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: ['src/services/**', 'src/utils/**', 'src/components/**'],
+      exclude: ['src/test/**', 'src/components/CodingAssitant.tsx'],
+    },
   },
 } as any)
