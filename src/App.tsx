@@ -156,6 +156,7 @@ export default function App() {
   const speechAccumulatorRef = useRef<string>("");
   const autoAnswerTimerRef = useRef<any>(null);
   const lastAutoAnsweredQuestionRef = useRef<string>("");
+  const lastAnsweredTranscriptLenRef = useRef<number>(0);
   const lastTriggerTimeRef = useRef<number>(0);
   const isGeneratingRef = useRef<boolean>(false);
   const triggerGenRef = useRef<(prompt: string, modeOverride?: AssistantMode, contextText?: string) => void>(() => {});
@@ -560,6 +561,7 @@ export default function App() {
 
     if (promptOverride && promptOverride.trim()) {
       lastAutoAnsweredQuestionRef.current = promptOverride.trim();
+      lastAnsweredTranscriptLenRef.current = transcript.length;
       triggerGeneration(promptOverride.trim());
       return;
     }
@@ -567,9 +569,20 @@ export default function App() {
     // Extract the latest/last question from the end of the speech transcript
     const extracted = extractLastQuestionFromSpeech(transcript, interimText);
     if (extracted.question && extracted.question.trim().length > 2) {
-      lastAutoAnsweredQuestionRef.current = extracted.question.trim();
-      showToast(`Answering: "${extracted.question.slice(0, 42)}..."`, "info");
-      triggerGeneration(extracted.question.trim(), undefined, extracted.fullTranscriptText);
+      const candidateQ = extracted.question.trim();
+      const currentAnswer = responses[0];
+      const isSameAsCurrent = currentAnswer && currentAnswer.prompt.toLowerCase().trim() === candidateQ.toLowerCase();
+      const hasNewSpeech = transcript.length > lastAnsweredTranscriptLenRef.current || (interimText && interimText.trim().length > 0);
+
+      if (isSameAsCurrent && !hasNewSpeech) {
+        showToast("Already answered this question. Listening for next question...", "info");
+        return;
+      }
+
+      lastAutoAnsweredQuestionRef.current = candidateQ;
+      lastAnsweredTranscriptLenRef.current = transcript.length;
+      showToast(`Answering: "${candidateQ.slice(0, 42)}..."`, "info");
+      triggerGeneration(candidateQ, undefined, extracted.fullTranscriptText);
       return;
     }
 
@@ -578,7 +591,7 @@ export default function App() {
       return;
     }
 
-    showToast("Please speak a question or click a preset.", "info");
+    showToast("No question detected yet. Speak your question or open Chat (Ctrl ⇧ …) to type.", "info");
   };
 
   const handleClearCurrentAnswer = () => {
@@ -587,6 +600,7 @@ export default function App() {
       autoAnswerTimerRef.current = null;
     }
     lastAutoAnsweredQuestionRef.current = "";
+    lastAnsweredTranscriptLenRef.current = 0;
     if (activeResponseId) {
       const remaining = responses.filter((r) => r.id !== activeResponseId);
       setResponses(remaining);

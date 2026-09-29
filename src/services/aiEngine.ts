@@ -677,8 +677,8 @@ export class AIEngine {
 
     lines.push("CRITICAL ANSWER RULES:");
     lines.push("1. DIRECT RELEVANCE & ACCURACY: Answer the EXACT question or topic asked. If the prompt is a technical term or concept from the interview transcript, explain that specific concept with precision.");
-    lines.push("2. DO NOT REPEAT RESUME INTROS: NEVER talk about AWS, Terraform, or generic microservices unless the question is explicitly about your past work, cloud infrastructure, or behavioral background (e.g. 'Tell me about yourself', 'Walk me through your resume', 'What did you build at your last company?').");
-    lines.push("3. NO DUPLICATE BOILERPLATE: If asked about general concepts, algorithms, SQL, Python, or data engineering, answer the technical mechanics, trade-offs, architecture, and code directly without unnecessary introductory filler.");
+    lines.push("2. ZERO UNASKED RESUME PITCHES: NEVER talk about AWS, Terraform, Microservices, or candidate background unless the interviewer EXPLICITLY asks for a self-introduction ('Tell me about yourself', 'Walk me through your resume', 'What did you build at your last role?'). For any technical topic or concept, explain the technical mechanics, architecture, and code directly without introductory fluff.");
+    lines.push("3. NO DUPLICATE ANSWERS: Each answer must be distinct, addressing the specific prompt with code examples, internal mechanics, and real-world trade-offs.");
     lines.push("4. INTERVIEW FORMAT: Structure answers with crisp bullet points, bold key terms, and exact technical explanations that the user can speak comfortably in an interview.");
     lines.push("5. CONTEXT DISAMBIGUATION: If the prompt is brief or conversational, examine the RECENT INTERVIEW CONVERSATION to determine the actual topic the interviewer was asking about and answer that directly.");
     return lines.join("\n");
@@ -975,21 +975,41 @@ export class AIEngine {
       ].join("\n");
     }
 
-    // Introduction / Resume Walkthrough
-    const isIntroOrResume =
-      p.includes("tell me about yourself") ||
+    // Introduction / Resume Walkthrough (strictly scoped to personal introduction)
+    const isExplicitIntro =
+      p === "tell me about yourself" ||
+      p.startsWith("tell me about yourself") ||
+      p === "explain yourself" ||
+      p.startsWith("explain yourself") ||
       p.includes("walk me through your resume") ||
-      p.includes("about your background") ||
-      p.includes("about your experience") ||
+      p.includes("walk through your resume") ||
       p.includes("introduce yourself") ||
-      p.includes("your experience") ||
-      p.includes("your resume") ||
-      p.includes("past projects") ||
-      p.includes("what have you built") ||
-      p.includes("tell me about your role") ||
-      p.includes("what do you do") ||
-      p.includes("why should we hire you") ||
-      p.includes("your background");
+      p.includes("give me your elevator pitch") ||
+      p === "who are you" ||
+      p === "tell me about your background" ||
+      p === "walk me through your background" ||
+      p === "what is your background" ||
+      p === "tell me about your role" ||
+      p === "what do you do" ||
+      p.startsWith("why should we hire you");
+
+    const isNotTechnicalQuestion =
+      !p.includes("if ") &&
+      !p.includes("when ") &&
+      !p.includes("how to ") &&
+      !p.includes("how do you ") &&
+      !p.includes("how would you ") &&
+      !p.includes("what would you ") &&
+      !p.includes("difference") &&
+      !p.includes("explain how") &&
+      !p.includes("in python") &&
+      !p.includes("in sql") &&
+      !p.includes("in java") &&
+      !p.includes("in spark") &&
+      !p.includes("in databricks") &&
+      !p.includes("in kafka");
+
+    const isIntroOrResume = isExplicitIntro && isNotTechnicalQuestion;
 
     if (isIntroOrResume) {
       const topMetrics = profile.keyMetrics && profile.keyMetrics.length > 0

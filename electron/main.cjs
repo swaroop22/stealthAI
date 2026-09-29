@@ -312,12 +312,10 @@ function stopSpeechProcess() {
   }
 }
 
-ipcMain.on('start-native-speech', (event) => {
+function startSpeechProcess() {
   if (speechProcess && !speechProcess.killed) {
     return;
   }
-  isIntentionalStop = false;
-  stopSpeechProcess();
   isIntentionalStop = false;
 
   let binPath = null;
@@ -377,8 +375,17 @@ ipcMain.on('start-native-speech', (event) => {
 
     speechProcess.on('exit', (code, signal) => {
       speechProcess = null;
-      if (!isIntentionalStop && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('native-speech-event', { type: 'stopped', code, signal });
+      if (!isIntentionalStop) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('native-speech-event', { type: 'stopped', code, signal });
+        }
+        // Auto-respawn helper after unexpected exit if listening should remain active
+        setTimeout(() => {
+          if (!isIntentionalStop && !speechProcess && mainWindow && !mainWindow.isDestroyed()) {
+            console.log('Auto-respawning native speech helper...');
+            startSpeechProcess();
+          }
+        }, 800);
       }
     });
   } catch (err) {
@@ -387,6 +394,10 @@ ipcMain.on('start-native-speech', (event) => {
       mainWindow.webContents.send('native-speech-event', { type: 'error', message: err.message });
     }
   }
+}
+
+ipcMain.on('start-native-speech', () => {
+  startSpeechProcess();
 });
 
 ipcMain.on('stop-native-speech', () => {

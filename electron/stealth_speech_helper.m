@@ -13,6 +13,7 @@
 @property (nonatomic, strong) NSString *lastEmittedInterim;
 @property (nonatomic, assign) NSUInteger committedLength;
 @property (nonatomic, strong) NSTimer *silenceTimer;
+@property (nonatomic, strong) NSTimer *watchdogTimer;
 @property (nonatomic, strong) NSDate *taskStartTime;
 @end
 
@@ -32,6 +33,7 @@ static StealthSpeechEngine *globalEngine = nil;
         self.currentTaskId = 0;
         self.lastEmittedInterim = @"";
         self.committedLength = 0;
+        self.watchdogTimer = nil;
     }
     return self;
 }
@@ -50,7 +52,62 @@ static StealthSpeechEngine *globalEngine = nil;
 
     [self emitJSON:@{@"type": @"status", @"message": @"starting"}];
     self.isRunning = YES;
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleAudioEngineConfigChange:)
+                                                 name:AVAudioEngineConfigurationChangeNotification
+                                               object:self.audioEngine];
+
     [self setupAndStartAudio];
+
+    // Periodic watchdog: monitors audioEngine health, task age, and task state every 2s
+    __weak typeof(self) weakSelf = self;
+    self.watchdogTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || !strongSelf.isRunning) return;
+
+        // 1. Ensure audio engine is alive
+        if (!strongSelf.audioEngine.isRunning) {
+            NSError *err = nil;
+            BOOL reStarted = [strongSelf.audioEngine startAndReturnError:&err];
+            if (!reStarted || err) {
+                [strongSelf emitJSON:@{@"type": @"error", @"message": @"AudioEngine restart failed"}];
+            }
+        }
+
+        // 2. Proactively roll over task before Apple's ~60s duration limit
+        NSTimeInterval age = [[NSDate date] timeIntervalSinceDate:strongSelf.taskStartTime];
+        if (age >= 40.0) {
+            NSString *finalText = [strongSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (finalText.length > 0) {
+                [strongSelf emitJSON:@{
+                    @"type": @"final",
+                    @"text": finalText
+                }];
+                strongSelf.lastEmittedInterim = @"";
+            }
+            [strongSelf refreshTaskCleanly];
+            return;
+        }
+
+        // 3. Ensure current recognition task is active and not cancelled/completed
+        if (!strongSelf.currentTask ||
+            strongSelf.currentTask.state == SFSpeechRecognitionTaskStateCompleted ||
+            strongSelf.currentTask.state == SFSpeechRecognitionTaskStateCanceling) {
+            [strongSelf refreshTaskCleanly];
+        }
+    }];
+}
+
+- (void)handleAudioEngineConfigChange:(NSNotification *)notif {
+    if (!self.isRunning) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.audioEngine.isRunning) {
+            [self.audioEngine.inputNode removeTapOnBus:0];
+            [self.audioEngine stop];
+        }
+        [self setupAndStartAudio];
+    });
 }
 
 - (void)setupAndStartAudio {
@@ -150,9 +207,13 @@ static StealthSpeechEngine *globalEngine = nil;
     newRequest.shouldReportPartialResults = YES;
     newRequest.taskHint = SFSpeechRecognitionTaskHintDictation;
 
-    // Allow on-device with graceful system fallback
+    // Prefer 100% on-device offline recognition when supported (no server throttling / no timeouts)
     if (@available(macOS 10.15, *)) {
-        newRequest.requiresOnDeviceRecognition = NO;
+        if (self.recognizer.supportsOnDeviceRecognition) {
+            newRequest.requiresOnDeviceRecognition = YES;
+        } else {
+            newRequest.requiresOnDeviceRecognition = NO;
+        }
     }
 
     if (@available(macOS 13.0, *)) {
@@ -251,27 +312,29 @@ static StealthSpeechEngine *globalEngine = nil;
                         strongSelf.lastEmittedInterim = @"";
                     }
                     [strongSelf refreshTaskCleanly];
+                    return;
                 }
             }
 
-            // Real error from the current active task (ignoring normal cancel error 216)
+            // Real error or task completion from Apple Speech subsystem (including timeout/cancel error 216/209)
             if (taskError && strongSelf.isRunning && strongSelf.currentTaskId == thisTaskId) {
-                if (taskError.code != 216) {
-                    NSString *finalText = [strongSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-                    if (finalText.length > 0) {
-                        [strongSelf emitJSON:@{
-                            @"type": @"final",
-                            @"text": finalText
-                        }];
-                        strongSelf.lastEmittedInterim = @"";
-                    }
-                    // Auto-recover after unexpected error
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(400 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-                        if (strongSelf.isRunning && strongSelf.currentTaskId == thisTaskId) {
-                            [strongSelf refreshTaskCleanly];
-                        }
-                    });
+                NSString *finalText = [strongSelf.lastEmittedInterim stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                if (finalText.length > 0) {
+                    [strongSelf emitJSON:@{
+                        @"type": @"final",
+                        @"text": finalText
+                    }];
+                    strongSelf.lastEmittedInterim = @"";
                 }
+                [strongSelf.silenceTimer invalidate];
+                strongSelf.silenceTimer = nil;
+
+                // Always auto-recover and schedule a fresh recognition task cleanly
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(150 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    if (strongSelf.isRunning && strongSelf.currentTaskId == thisTaskId) {
+                        [strongSelf refreshTaskCleanly];
+                    }
+                });
             }
         });
     }];
@@ -290,8 +353,13 @@ static StealthSpeechEngine *globalEngine = nil;
     self.isRunning = NO;
     self.currentTaskId++;
 
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:AVAudioEngineConfigurationChangeNotification object:self.audioEngine];
+
     [self.silenceTimer invalidate];
     self.silenceTimer = nil;
+
+    [self.watchdogTimer invalidate];
+    self.watchdogTimer = nil;
 
     @synchronized (self) {
         if (self.currentRequest) {

@@ -189,8 +189,8 @@ export function extractLastQuestionFromSpeech(
 
     const cleaned = cleanTrailingFillers(raw);
     const words = cleaned.split(/\s+/).filter(Boolean);
-    // Require substantive technical phrasing or at least 5 meaningful words to prevent noise fragments
-    if (words.length >= 3 && (TECHNICAL_OR_ACTION_REGEX.test(cleaned) || words.length >= 5)) {
+    // Require substantive technical phrasing or at least 6 meaningful words with technical context
+    if (words.length >= 3 && TECHNICAL_OR_ACTION_REGEX.test(cleaned)) {
       return {
         question: formatAsQuestion(cleaned),
         sourceSpeaker: turn.speaker,
@@ -200,11 +200,22 @@ export function extractLastQuestionFromSpeech(
     }
   }
 
-  // 3. Absolute fallback: the latest turn text if it has at least 2 words
+  // 3. Fallback: If no explicit question starter was found, check if the latest speech turn is a complete sentence (>= 6 words)
   const lastTurn = tailTurns[0];
   const lastClean = cleanTrailingFillers(lastTurn?.text || "");
+  const lastWords = lastClean.split(/\s+/).filter(Boolean);
+  if (lastWords.length >= 6 && TECHNICAL_OR_ACTION_REGEX.test(lastClean)) {
+    return {
+      question: formatAsQuestion(lastClean),
+      sourceSpeaker: lastTurn?.speaker,
+      timestamp: lastTurn?.timestamp,
+      fullTranscriptText
+    };
+  }
+
+  // No real question or technical inquiry detected in recent speech
   return {
-    question: lastClean.split(/\s+/).length >= 2 ? formatAsQuestion(lastClean) : "",
+    question: "",
     sourceSpeaker: lastTurn?.speaker,
     timestamp: lastTurn?.timestamp,
     fullTranscriptText

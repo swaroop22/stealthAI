@@ -35,6 +35,8 @@ export class SpeechService {
   private static usingNativeSpeech: boolean = false;
   private static nativeAudioLevel: number = 0;
   private static nativeRestartAttempts: number = 0;
+  private static nativeWatchdogInterval: any = null;
+  private static lastNativeActivityTime: number = 0;
 
   public static isSupported(): boolean {
     return (
@@ -103,6 +105,7 @@ export class SpeechService {
 
         this.nativeSpeechUnsubscribe = electron.onNativeSpeech((data: any) => {
           if (!this.isListening) return;
+          this.lastNativeActivityTime = Date.now();
 
           if (data.type === "interim") {
             if (this.storedOnInterim && data.text) {
@@ -127,31 +130,27 @@ export class SpeechService {
           } else if (data.type === "level") {
             this.nativeAudioLevel = typeof data.level === "number" ? data.level : 0;
           } else if (data.type === "stopped") {
-            if (this.isListening && this.usingNativeSpeech) {
-              if (this.nativeRestartAttempts < 2) {
-                this.nativeRestartAttempts++;
-                console.warn(`Native speech helper stopped, restarting (attempt ${this.nativeRestartAttempts})...`);
-                setTimeout(() => {
-                  if (this.isListening && this.usingNativeSpeech) {
-                    electron.startNativeSpeech();
-                  }
-                }, 600);
-              } else {
-                console.warn("Native speech helper stopped repeatedly, falling back to browser audio.");
-                this.usingNativeSpeech = false;
-                this.startBrowserFallback(onFinal, onInterim, onError);
-              }
+            if (this.isListening) {
+              console.warn("Native speech helper stopped, auto-restarting...");
+              setTimeout(() => {
+                if (this.isListening) {
+                  electron.startNativeSpeech();
+                }
+              }, 400);
             }
           } else if (data.type === "error") {
-            console.warn("Native speech notice:", data.message);
-            this.usingNativeSpeech = false;
-            this.startBrowserFallback(onFinal, onInterim, onError);
+            console.warn("Native speech helper notice:", data.message);
+            setTimeout(() => {
+              if (this.isListening) {
+                electron.startNativeSpeech();
+              }
+            }, 800);
           }
         });
 
         electron.startNativeSpeech();
         this.usingNativeSpeech = true;
-        this.nativeRestartAttempts = 0;
+        this.startNativeWatchdog();
         return true;
       } catch (nativeErr) {
         console.warn("Native speech start failed, falling back:", nativeErr);
@@ -159,6 +158,22 @@ export class SpeechService {
     }
 
     return await this.startBrowserFallback(onFinal, onInterim, onError);
+  }
+
+  private static startNativeWatchdog() {
+    if (this.nativeWatchdogInterval) clearInterval(this.nativeWatchdogInterval);
+    this.lastNativeActivityTime = Date.now();
+    this.nativeWatchdogInterval = setInterval(() => {
+      if (!this.isListening) return;
+      const electron = (window as any).electronAPI;
+      if (electron?.startNativeSpeech && electron.platform === "darwin") {
+        const quietMs = Date.now() - this.lastNativeActivityTime;
+        if (quietMs > 6000) {
+          // If no activity or level observed in 6s, ensure native speech helper process is running
+          electron.startNativeSpeech();
+        }
+      }
+    }, 3000);
   }
 
   private static async startBrowserFallback(
@@ -465,6 +480,10 @@ export class SpeechService {
     if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.watchdogTimer) clearInterval(this.watchdogTimer);
     if (this.vadInterval) clearInterval(this.vadInterval);
+    if (this.nativeWatchdogInterval) {
+      clearInterval(this.nativeWatchdogInterval);
+      this.nativeWatchdogInterval = null;
+    }
 
     if (this.usingNativeSpeech) {
       const electron = (window as any).electronAPI;
