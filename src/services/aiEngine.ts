@@ -18,7 +18,7 @@ export class AIEngine {
 
   public static normalizeConfig(configOrKey?: AIProviderConfig | string): AIProviderConfig {
     if (!configOrKey) {
-      return { provider: "gemini", apiKey: "", model: "gemini-2.5-flash" };
+      return { provider: "gemini", apiKey: "", model: "gemini-3.8-flash" };
     }
     if (typeof configOrKey === "string") {
       const trimmed = configOrKey.trim();
@@ -29,17 +29,24 @@ export class AIEngine {
       } else if (trimmed.startsWith("sk-")) {
         return { provider: "openai", apiKey: trimmed, model: "gpt-4o" };
       } else {
-        return { provider: "gemini", apiKey: trimmed, model: "gemini-2.5-flash" };
+        return { provider: "gemini", apiKey: trimmed, model: "gemini-3.8-flash" };
       }
     }
-    return configOrKey;
+    const cfg = { ...configOrKey };
+    if (cfg.provider === "gemini") {
+      // Auto-migrate deprecated 404 models to current 3.8 release
+      if (!cfg.model || cfg.model.includes("2.5") || cfg.model.includes("2.0") || cfg.model.includes("1.5")) {
+        cfg.model = "gemini-3.8-flash";
+      }
+    }
+    return cfg;
   }
 
   private static readonly FLASH_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-pro"
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-2.5-flash"
   ];
 
   public static async generateStreamingResponse(

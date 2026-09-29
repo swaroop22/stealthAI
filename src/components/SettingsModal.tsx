@@ -92,12 +92,12 @@ export const PROVIDERS: ProviderDef[] = [
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
     description: "Multimodal speed, 2M+ token context, live screen inspection, and built-in voice audio transcription.",
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-3.8-flash",
     models: [
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Fastest next-gen reasoning & vision" },
-      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", desc: "Reliable ultra-low latency production" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", desc: "2M token context for massive codebases" },
-      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", desc: "Fast lightweight multimodal" }
+      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", desc: "Flagship real-time reasoning & code intelligence" },
+      { id: "gemini-flash-latest", name: "Gemini Flash Latest", desc: "Always up-to-date highest-throughput model" },
+      { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", desc: "Next-gen low-latency multimodal reasoning" },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Legacy fast multimodal" }
     ],
     supportsVision: true,
     supportsSpeech: true
@@ -181,7 +181,7 @@ export const SettingsModal: React.FC<Props> = ({
   // Initialize active AI config
   const initialProvider = aiConfig?.provider || (apiKey.startsWith("sk-ant-") ? "claude" : apiKey.startsWith("pplx-") ? "perplexity" : apiKey.startsWith("sk-") ? "openai" : "gemini");
   const initialKey = aiConfig?.apiKey || apiKey || "";
-  const initialModel = aiConfig?.model || PROVIDERS.find((p) => p.id === initialProvider)?.defaultModel || "gemini-2.5-flash";
+  const initialModel = aiConfig?.model || PROVIDERS.find((p) => p.id === initialProvider)?.defaultModel || "gemini-3.8-flash";
   const initialBaseUrl = aiConfig?.baseUrl || (initialProvider === "custom_openai" ? "https://api.deepseek.com/v1" : "");
 
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>(initialProvider);

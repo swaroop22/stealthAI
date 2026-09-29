@@ -106,7 +106,7 @@ export default function App() {
       try {
         const parsed = JSON.parse(saved);
         if (parsed?.apiKey && parsed.apiKey.trim().length > 5) {
-          return parsed;
+          return AIEngine.normalizeConfig(parsed);
         }
       } catch (e) {}
     }
@@ -116,7 +116,7 @@ export default function App() {
     }
     const envKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
     if (envKey) {
-      return { provider: "gemini", apiKey: envKey, model: "gemini-2.5-flash" };
+      return { provider: "gemini", apiKey: envKey, model: "gemini-3.8-flash" };
     }
     return AIEngine.normalizeConfig("");
   });

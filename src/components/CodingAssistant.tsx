@@ -177,6 +177,8 @@ export const CodingAssistant: React.FC<Props> = ({
     if (m.includes("deepseek-chat")) return "DeepSeek V3";
     if (m.includes("deepseek-reasoner") || m.includes("deepseek-r1")) return "DeepSeek R1";
     if (m.includes("llama-3.3-70b")) return "Groq LLaMA";
+    if (m.includes("gemini-3.8") || m.includes("gemini-flash")) return "Gemini 3.8";
+    if (m.includes("gemini-3.5")) return "Gemini 3.5";
     if (m.includes("gemini-2.5-flash")) return "Gemini 2.5";
     if (m.includes("gemini-2.0-flash")) return "Gemini 2.0";
     if (m.includes("gemini-1.5-pro")) return "Gemini 1.5 Pro";

@@ -10,6 +10,11 @@ app.commandLine.appendSwitch('enable-speech-dispatcher');
 
 const isDev = !app.isPackaged || process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+}
+
 let mainWindow = null;
 
 function createWindow() {
@@ -437,12 +442,21 @@ app.whenReady().then(() => {
       mainWindow.focus();
     }
   });
+
+  app.on('second-instance', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+      if (process.platform === 'darwin') app.focus({ steal: true });
+    } else {
+      createWindow();
+    }
+  });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  app.quit();
 });
 
 app.on('will-quit', () => {
