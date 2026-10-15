@@ -1,22 +1,30 @@
 import React from "react";
-import { ShieldCheck, Settings, Download, Activity, FileText } from "lucide-react";
+import { ShieldCheck, Settings, Download, Activity, FileText, ArrowLeft, PhoneOff, Briefcase } from "lucide-react";
 import { AudioVisualizer } from "./AudioVisualizer";
-import type { ConsentAudit, CandidateProfile } from "../types";
+import type { ConsentAudit, CandidateProfile, CallSession } from "../types";
 
 interface Props {
   isCapturing: boolean;
   consent: ConsentAudit;
   profile: CandidateProfile;
+  activeSession?: CallSession | null;
+  onEndSession?: () => void;
+  onBackToDashboard?: () => void;
   onOpenResumeModal: () => void;
   onOpenSettings: () => void;
+  onOpenDownloadModal?: () => void;
   onExport: () => void;
 }
 
 export const Header: React.FC<Props> = ({
   isCapturing,
   profile,
+  activeSession,
+  onEndSession,
+  onBackToDashboard,
   onOpenResumeModal,
   onOpenSettings,
+  onOpenDownloadModal,
   onExport
 }) => {
   const hasResume = Boolean(profile.resumeText && profile.resumeText.length > 20);
@@ -49,6 +57,49 @@ export const Header: React.FC<Props> = ({
       </div>
 
       <div className="header-right">
+        {activeSession ? (
+          <>
+            <div className="active-call-session-pill" title={`Session: ${activeSession.company} - ${activeSession.role}`}>
+              <Briefcase size={14} className="text-emerald" />
+              <span className="session-pill-company">{activeSession.company}</span>
+              <span className="session-pill-role">({activeSession.role})</span>
+            </div>
+
+            {onEndSession && (
+              <button
+                className="btn-end-session-header"
+                onClick={onEndSession}
+                title="End current call session and save transcript"
+              >
+                <PhoneOff size={14} />
+                <span>End Session</span>
+              </button>
+            )}
+
+            {onBackToDashboard && (
+              <button
+                className="btn-header-back-sessions"
+                onClick={onBackToDashboard}
+                title="Return to Call Sessions list"
+              >
+                <ArrowLeft size={14} />
+                <span>All Sessions</span>
+              </button>
+            )}
+          </>
+        ) : (
+          onBackToDashboard && (
+            <button
+              className="btn-header-back-sessions"
+              onClick={onBackToDashboard}
+              title="Return to Call Sessions list"
+            >
+              <ArrowLeft size={14} />
+              <span>All Sessions</span>
+            </button>
+          )
+        )}
+
         {/* Resume Button with Live Ingestion Status */}
         <button
           className={`btn-resume-header ${hasResume ? "ingested" : "empty"}`}
@@ -67,6 +118,19 @@ export const Header: React.FC<Props> = ({
           <ShieldCheck size={15} />
           <span>Consent Verified</span>
         </div>
+
+        {onOpenDownloadModal && (
+          <button
+            className="btn-header-download"
+            onClick={onOpenDownloadModal}
+            title="Download StealthAI Native Desktop App for macOS or Windows"
+            id="btn-header-download-app"
+          >
+            <Download size={14} />
+            <span>Download Desktop</span>
+            <span className="btn-header-download-pill">Mac / Win</span>
+          </button>
+        )}
 
         <button className="btn-header-action" onClick={onExport} title="Export notes">
           <Download size={16} />

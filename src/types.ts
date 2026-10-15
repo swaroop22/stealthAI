@@ -67,3 +67,44 @@ export interface PresetScenario {
   prompt: string;
   sampleCodeSnippet?: string;
 }
+
+export type SessionType = "Interview" | "Regular" | "Mock";
+
+export interface SessionPreferences {
+  mode: AssistantMode;
+  autoAnswer: boolean;
+  aiProvider?: string;
+  model?: string;
+  customInstructions?: string;
+}
+
+export interface CallSession {
+  id: string;
+  sessionType: SessionType;
+  company: string;
+  role: string;
+  jobDescription: string;
+  resumeFileName?: string;
+  resumeText?: string;
+  documentName?: string;
+  date: string;
+  createdAt: string;
+  endedAt?: string;
+  status: "Live" | "Ended" | "Ready";
+  duration: string;
+  durationSeconds: number;
+  transcript: TranscriptItem[];
+  responses: AIResponse[];
+  preferences: SessionPreferences;
+}
+
+export interface CreateSessionInput {
+  sessionType: SessionType;
+  company: string;
+  role?: string;
+  jobDescription: string;
+  resumeFileName?: string;
+  resumeText?: string;
+  documentName?: string;
+  preferences?: Partial<SessionPreferences>;
+}

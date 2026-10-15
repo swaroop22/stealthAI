@@ -7,6 +7,9 @@ import { AssistantPanel } from "./components/AssistantPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ResumeModal } from "./components/ResumeModal";
 import { CodingAssistant } from "./components/CodingAssistant";
+import { CallSessionsDashboard } from "./components/ParakeetDashboard/CallSessionsDashboard";
+import { DownloadModal } from "./components/DownloadModal";
+import { SessionService } from "./services/sessionService";
 import { SpeechService } from "./services/speechService";
 import { ScreenCaptureService } from "./services/screenService";
 import { AIEngine } from "./services/aiEngine";
@@ -19,9 +22,11 @@ import type {
   ConsentAudit,
   PresetScenario,
   SpeakerType,
-  AIProviderConfig
+  AIProviderConfig,
+  CallSession,
+  CreateSessionInput
 } from "./types";
-import { AlertCircle, CheckCircle2, LayoutGrid, Layers } from "lucide-react";
+import { AlertCircle, CheckCircle2, LayoutGrid, Layers, ArrowLeft, PhoneOff } from "lucide-react";
 import { extractLastQuestionFromSpeech } from "./utils/speechExtractor";
 import { AudioRecordingService, RecordingState } from "./services/audioRecordingService";
 import "./App.css";
@@ -68,7 +73,10 @@ const IGNORED_AUTO_ANSWER_PHRASES = [
 ];
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<"overlay" | "dashboard">("overlay");
+  const [viewMode, setViewMode] = useState<"sessions" | "overlay" | "dashboard">("sessions");
+  const [sessions, setSessions] = useState<CallSession[]>(() => SessionService.getAllSessions());
+  const [activeSession, setActiveSession] = useState<CallSession | null>(null);
+  const [sessionTimerSeconds, setSessionTimerSeconds] = useState<number>(0);
 
   const [consent, setConsent] = useState<ConsentAudit>(() => {
     const saved = localStorage.getItem("stealthai_consent");
@@ -123,7 +131,7 @@ export default function App() {
 
   const apiKey = aiConfig.apiKey;
 
-  const [isCapturing, setIsCapturing] = useState<boolean>(true);
+  const [isCapturing, setIsCapturing] = useState<boolean>(false);
   const [interimText, setInterimText] = useState<string>("");
   const [activeSpeaker, setActiveSpeaker] = useState<SpeakerType>("Interviewer");
   const [transcript, setTranscript] = useState<TranscriptItem[]>(DEFAULT_INITIAL_TRANSCRIPT);
@@ -140,6 +148,7 @@ export default function App() {
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
 
   // Audio Recording to Computer (Default: Enabled)
@@ -236,8 +245,8 @@ export default function App() {
   useEffect(() => {
     const electron = (window as any).electronAPI;
     if (electron?.resizeWindow) {
-      if (viewMode === "dashboard") {
-        electron.resizeWindow(1200, 800);
+      if (viewMode === "dashboard" || viewMode === "sessions") {
+        electron.resizeWindow(1280, 840);
       } else {
         electron.resizeWindow(920, 520);
       }
@@ -283,49 +292,55 @@ export default function App() {
     }
   }, [aiConfig]);
 
-  // Auto-start speech capture on default launch
-  useEffect(() => {
-    let active = true;
-    const initSpeechOnDefault = async () => {
-      await new Promise((r) => setTimeout(r, 300));
-      if (!active) return;
-
-      SpeechService.setSpeaker(activeSpeaker);
-      SpeechService.setAIConfig(aiConfig);
-      const success = await SpeechService.startListening(
-        (finalItem) => {
-          if (!active) return;
-          setTranscript((prev) => {
-            const next = [...prev, finalItem];
-            scheduleAutoAnswerRef.current?.(next, "");
-            return next;
-          });
-          setInterimText("");
-        },
-        (interim) => {
-          if (!active) return;
-          setInterimText(interim);
-          if (interim && interim.trim().length > 8) {
-            scheduleAutoAnswerRef.current?.(undefined, interim);
-          }
-        },
-        (err) => {
-          if (!active) return;
-          console.warn("Speech init notice:", err);
+  // Explicit speech start/stop helpers (only captures during active calls or manual trigger)
+  const startListening = useCallback(async () => {
+    SpeechService.setSpeaker(activeSpeaker);
+    SpeechService.setAIConfig(aiConfig);
+    const success = await SpeechService.startListening(
+      (finalItem) => {
+        setTranscript((prev) => {
+          const next = [...prev, finalItem];
+          scheduleAutoAnswerRef.current?.(next, "");
+          return next;
+        });
+        setInterimText("");
+      },
+      (interim) => {
+        setInterimText(interim);
+        if (interim && interim.trim().length > 8) {
+          scheduleAutoAnswerRef.current?.(undefined, interim);
         }
-      );
-
-      if (active) {
-        setIsCapturing(Boolean(success));
+      },
+      (err) => {
+        console.warn("Speech init notice:", err);
       }
-    };
+    );
+    setIsCapturing(Boolean(success));
+    return Boolean(success);
+  }, [activeSpeaker, aiConfig]);
 
-    initSpeechOnDefault();
-
-    return () => {
-      active = false;
-    };
+  const stopListening = useCallback(() => {
+    SpeechService.stopListening();
+    setIsCapturing(false);
+    setInterimText("");
+    speechAccumulatorRef.current = "";
+    if (autoAnswerTimerRef.current) {
+      clearTimeout(autoAnswerTimerRef.current);
+    }
   }, []);
+
+  // Active call duration timer
+  useEffect(() => {
+    let timer: any = null;
+    if (activeSession) {
+      timer = setInterval(() => {
+        setSessionTimerSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [activeSession]);
 
   // Determine mode automatically from prompt
   const detectMode = (prompt: string, currentMode: AssistantMode): AssistantMode => {
@@ -383,6 +398,16 @@ export default function App() {
       isGeneratingRef.current = true;
       lastTriggerTimeRef.current = Date.now();
 
+      const sessionContext = activeSession
+        ? {
+            company: activeSession.company,
+            role: activeSession.role,
+            jobDescription: activeSession.jobDescription,
+            sessionType: activeSession.sessionType,
+            customInstructions: activeSession.preferences?.customInstructions
+          }
+        : undefined;
+
       AIEngine.generateStreamingResponse(
         cleanPrompt,
         mode,
@@ -433,10 +458,11 @@ export default function App() {
             );
           }
         },
-        contextText
+        contextText,
+        sessionContext
       );
     },
-    [activeMode, profile, activeSnippet, consent.localOnlyMode, apiKey]
+    [activeMode, profile, activeSnippet, aiConfig, activeSession]
   );
 
   // Keep ref up to date
@@ -484,43 +510,15 @@ export default function App() {
     }
 
     if (isCapturing) {
-      SpeechService.stopListening();
-      setIsCapturing(false);
-      setInterimText("");
-      speechAccumulatorRef.current = "";
-      if (autoAnswerTimerRef.current) {
-        clearTimeout(autoAnswerTimerRef.current);
-      }
+      stopListening();
       showToast("Captions paused.", "info");
     } else {
-      SpeechService.setSpeaker(activeSpeaker);
-      SpeechService.setAIConfig(aiConfig);
-      const success = await SpeechService.startListening(
-        (finalItem) => {
-          setTranscript((prev) => {
-            const next = [...prev, finalItem];
-            scheduleAutoAnswerRef.current?.(next, "");
-            return next;
-          });
-          setInterimText("");
-        },
-        (interim) => {
-          setInterimText(interim);
-          if (interim && interim.trim().length > 8) {
-            scheduleAutoAnswerRef.current?.(undefined, interim);
-          }
-        },
-        (err) => {
-          showToast(err, "error");
-        }
-      );
-
-      if (success) {
-        setIsCapturing(true);
+      const ok = await startListening();
+      if (ok) {
         showToast("Audio transcription active (Continuous listening).", "success");
       }
     }
-  }, [consent.granted, isCapturing, activeSpeaker, apiKey]);
+  }, [consent.granted, isCapturing, startListening, stopListening]);
 
   // Audio recording handlers (save to computer disk)
   const handleToggleRecording = useCallback(async () => {
@@ -720,6 +718,100 @@ export default function App() {
 
   const activeResponse = responses.find((r) => r.id === activeResponseId) || (responses.length > 0 ? responses[0] : null);
 
+  // Parakeet AI Session Management Handlers
+  const handleCreateSession = (input: CreateSessionInput, launchDirectly: boolean) => {
+    const newSession = SessionService.createSession(input);
+    const updatedList = SessionService.getAllSessions();
+    setSessions(updatedList);
+    showToast(`Session "${newSession.company}" created successfully!`, "success");
+
+    if (launchDirectly) {
+      handleStartSession(newSession);
+    }
+  };
+
+  const handleStartSession = async (session: CallSession) => {
+    const updated = SessionService.updateSession(session.id, { status: "Live" });
+    setActiveSession(updated);
+    setSessions(SessionService.getAllSessions());
+    setTranscript(updated.transcript || []);
+    setResponses(updated.responses || []);
+    if (updated.responses && updated.responses.length > 0) {
+      setActiveResponseId(updated.responses[0].id);
+    }
+
+    if (updated.resumeText) {
+      setProfile((prev) => ({
+        ...prev,
+        resumeText: updated.resumeText,
+        resumeFileName: updated.resumeFileName || prev.resumeFileName
+      }));
+    }
+
+    if (updated.preferences) {
+      if (updated.preferences.mode) setActiveMode(updated.preferences.mode);
+      if (typeof updated.preferences.autoAnswer === "boolean") {
+        setAutoAnswer(updated.preferences.autoAnswer);
+      }
+    }
+
+    setSessionTimerSeconds(updated.durationSeconds || 0);
+
+    // Switch to studio live mode
+    setViewMode("dashboard");
+    await startListening();
+    showToast(`Started live session for ${updated.company}!`, "success");
+  };
+
+  const handleEndSession = () => {
+    if (!activeSession) {
+      setViewMode("sessions");
+      return;
+    }
+
+    stopListening();
+
+    if (recordingState.isRecording) {
+      AudioRecordingService.stopRecording().then(() => {
+        setRecordingState({ isRecording: false, seconds: 0 });
+      });
+    }
+
+    const ended = SessionService.endSession(
+      activeSession.id,
+      sessionTimerSeconds,
+      transcript,
+      responses
+    );
+
+    setActiveSession(null);
+    setSessions(SessionService.getAllSessions());
+    setViewMode("sessions");
+    showToast(`Session for ${ended.company} ended (${ended.duration}) and saved to Call Sessions.`, "success");
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    SessionService.deleteSession(sessionId);
+    if (activeSession?.id === sessionId) {
+      stopListening();
+      setActiveSession(null);
+    }
+    setSessions(SessionService.getAllSessions());
+    showToast("Session deleted from records", "info");
+  };
+
+  const handleExportCallSession = (session: CallSession) => {
+    const data = JSON.stringify(session, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${session.company.toLowerCase().replace(/[^a-z0-9]/g, "_")}_session_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported session for ${session.company}`, "success");
+  };
+
   const handleExport = () => {
     const report = {
       metadata: {
@@ -753,7 +845,22 @@ export default function App() {
 
   return (
     <>
-      {viewMode === "overlay" ? (
+      {viewMode === "sessions" ? (
+        /* PARAKEET AI CALL SESSIONS DASHBOARD (LOCAL URL DEFAULT) */
+        <CallSessionsDashboard
+          sessions={sessions}
+          activeSession={activeSession}
+          onCreateSession={handleCreateSession}
+          onStartSession={handleStartSession}
+          onDeleteSession={handleDeleteSession}
+          onExportSession={handleExportCallSession}
+          onSwitchToHUD={() => setViewMode("overlay")}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenResumeModal={() => setIsResumeModalOpen(true)}
+          onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
+          showToast={showToast}
+        />
+      ) : viewMode === "overlay" ? (
         /* CODING ASSISTANT FLOATING HUD & ANSWER CARD OVERLAY */
         <CodingAssistant
           isCapturing={isCapturing}
@@ -797,13 +904,23 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenResumeModal={() => setIsResumeModalOpen(true)}
           onExportSession={handleExport}
-          onSwitchToDashboard={() => setViewMode("dashboard")}
+          onSwitchToDashboard={() => setViewMode("sessions")}
+          activeSession={activeSession}
+          onEndSession={handleEndSession}
           showToast={showToast}
         />
       ) : (
         /* FULL DASHBOARD STUDIO VIEW */
         <div className="app-layout">
           <div className="view-switch-banner">
+            <button
+              className="btn-overlay-mode"
+              onClick={() => setViewMode("sessions")}
+              title="Return to Call Sessions Dashboard"
+            >
+              <ArrowLeft size={15} />
+              <span>← Return to Call Sessions List</span>
+            </button>
             <button
               className="btn-overlay-mode"
               onClick={() => setViewMode("overlay")}
@@ -818,8 +935,12 @@ export default function App() {
             isCapturing={isCapturing}
             consent={consent}
             profile={profile}
+            activeSession={activeSession}
+            onEndSession={handleEndSession}
+            onBackToDashboard={() => setViewMode("sessions")}
             onOpenResumeModal={() => setIsResumeModalOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
             onExport={handleExport}
           />
 
@@ -952,6 +1073,13 @@ export default function App() {
         onSaveApiKey={(k) => setAIConfig((prev) => ({ ...prev, apiKey: k }))}
         onSaveConsent={(c) => setConsent(c)}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Download Desktop App Modal */}
+      <DownloadModal
+        isOpen={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
+        showToast={showToast}
       />
     </>
   );

@@ -92,4 +92,18 @@ describe("<Header />", () => {
     fireEvent.click(settingsBtn);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
+
+  it("triggers onOpenDownloadModal when download button is clicked", () => {
+    const onOpenDownloadModal = vi.fn();
+    render(
+      <Header
+        {...defaultProps}
+        onOpenDownloadModal={onOpenDownloadModal}
+      />
+    );
+
+    const downloadBtn = screen.getByTitle("Download StealthAI Native Desktop App for macOS or Windows");
+    fireEvent.click(downloadBtn);
+    expect(onOpenDownloadModal).toHaveBeenCalledTimes(1);
+  });
 });

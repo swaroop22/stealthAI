@@ -21,7 +21,7 @@ import {
   Zap,
   Disc
 } from "lucide-react";
-import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem, AIProviderConfig } from "../types";
+import type { AIResponse, CandidateProfile, ConsentAudit, ScreenSnippet, SpeakerType, TranscriptItem, AIProviderConfig, CallSession } from "../types";
 
 interface Props {
   isCapturing: boolean;
@@ -51,6 +51,8 @@ interface Props {
   onOpenResumeModal: () => void;
   onExportSession: () => void;
   onSwitchToDashboard: () => void;
+  activeSession?: CallSession | null;
+  onEndSession?: () => void;
   showToast: (text: string, type: "info" | "success" | "error") => void;
 }
 
@@ -67,6 +69,8 @@ export const CodingAssistant: React.FC<Props> = ({
   onToggleAutoAnswer,
   isRecordingAudio = false,
   recordingSeconds = 0,
+  activeSession,
+  onEndSession,
   onToggleRecording,
   onOpenRecordingsFolder,
   onToggleCapture,
@@ -326,6 +330,24 @@ export const CodingAssistant: React.FC<Props> = ({
               <span className="pill-text">Chat</span>
               <span className="codingassist-kbd">Ctrl ⇧ …</span>
             </button>
+
+            {/* Active Session Info Pill */}
+            {activeSession && (
+              <div className="codingassist-pill-btn codingassist-pill-active-session" title={`Active: ${activeSession.company} - ${activeSession.role}`}>
+                <span className="pill-text">🏢 {activeSession.company}</span>
+              </div>
+            )}
+
+            {/* End Call Session Button */}
+            {activeSession && onEndSession && (
+              <button
+                className="codingassist-pill-btn codingassist-pill-endcall"
+                onClick={onEndSession}
+                title="End current call session and save transcript"
+              >
+                <span className="pill-text text-red-400">End Call</span>
+              </button>
+            )}
 
             {/* AI Model Badge Pill */}
             <button

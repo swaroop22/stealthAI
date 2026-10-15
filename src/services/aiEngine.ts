@@ -56,7 +56,14 @@ export class AIEngine {
     snippet: ScreenSnippet | null,
     apiKeyOrConfig: AIProviderConfig | string,
     callbacks: StreamCallbacks,
-    transcriptContext?: string
+    transcriptContext?: string,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
   ): Promise<void> {
     this.stopGeneration();
     this.abortController = new AbortController();
@@ -67,20 +74,20 @@ export class AIEngine {
     if (config.apiKey && config.apiKey.trim().length > 5) {
       try {
         if (config.provider === "openai") {
-          await this.streamOpenAIAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          await this.streamOpenAIAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext, sessionContext);
           return;
         } else if (config.provider === "claude") {
-          await this.streamClaudeAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          await this.streamClaudeAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext, sessionContext);
           return;
         } else if (config.provider === "perplexity") {
-          await this.streamPerplexityAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          await this.streamPerplexityAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext, sessionContext);
           return;
         } else if (config.provider === "custom_openai") {
-          await this.streamOpenAICompatibleAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          await this.streamOpenAICompatibleAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext, sessionContext);
           return;
         } else {
           // Gemini
-          await this.streamGeminiAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext);
+          await this.streamGeminiAPI(prompt, mode, profile, snippet, config, callbacks, signal, transcriptContext, sessionContext);
           return;
         }
       } catch (err: any) {
@@ -202,9 +209,16 @@ export class AIEngine {
     config: AIProviderConfig,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    transcriptContext?: string
+    transcriptContext?: string,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
   ) {
-    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const systemPrompt = this.buildSystemPrompt(mode, profile, sessionContext);
     const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
       ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
       : prompt;
@@ -259,9 +273,16 @@ export class AIEngine {
     config: AIProviderConfig,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    transcriptContext?: string
+    transcriptContext?: string,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
   ) {
-    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const systemPrompt = this.buildSystemPrompt(mode, profile, sessionContext);
     const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
       ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
       : prompt;
@@ -326,9 +347,16 @@ export class AIEngine {
     config: AIProviderConfig,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    transcriptContext?: string
+    transcriptContext?: string,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
   ) {
-    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const systemPrompt = this.buildSystemPrompt(mode, profile, sessionContext);
     const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
       ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
       : prompt;
@@ -373,9 +401,16 @@ export class AIEngine {
     config: AIProviderConfig,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    transcriptContext?: string
+    transcriptContext?: string,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
   ) {
-    const systemPrompt = this.buildSystemPrompt(mode, profile);
+    const systemPrompt = this.buildSystemPrompt(mode, profile, sessionContext);
     const fullUserPrompt = transcriptContext && transcriptContext.trim().length > 0
       ? `=== RECENT INTERVIEW CONVERSATION (CONTEXT) ===\n${transcriptContext.slice(-2500)}\n\n=== CURRENT QUESTION TO ANSWER DIRECTLY ===\n${prompt}`
       : prompt;
@@ -487,11 +522,18 @@ export class AIEngine {
     apiKeyOrConfig: AIProviderConfig | string,
     callbacks: StreamCallbacks,
     signal: AbortSignal,
-    transcriptContext?: string
+    transcriptContext?: string,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
   ) {
     const config = this.normalizeConfig(apiKeyOrConfig);
     const apiKey = config.apiKey.trim();
-    const systemInstructions = this.buildSystemPrompt(mode, profile);
+    const systemInstructions = this.buildSystemPrompt(mode, profile, sessionContext);
     const contents: any[] = [];
     const userParts: any[] = [];
 
@@ -661,7 +703,17 @@ export class AIEngine {
     callbacks.onComplete(accumulated);
   }
 
-  private static buildSystemPrompt(mode: AssistantMode, profile: CandidateProfile): string {
+  private static buildSystemPrompt(
+    mode: AssistantMode,
+    profile: CandidateProfile,
+    sessionContext?: {
+      company?: string;
+      role?: string;
+      jobDescription?: string;
+      sessionType?: string;
+      customInstructions?: string;
+    }
+  ): string {
     const lines = [
       "You are an expert, real-time technical interview co-pilot assisting the candidate during a live interview.",
       "",
@@ -674,6 +726,21 @@ export class AIEngine {
       "- Work Achievements & Metrics: " + (profile.keyProjects || "High-scale enterprise data and cloud platforms"),
       ""
     ];
+
+    if (sessionContext) {
+      lines.push("=== TARGET INTERVIEW CONTEXT ===");
+      if (sessionContext.company) lines.push(`- Target Company: ${sessionContext.company}`);
+      if (sessionContext.role) lines.push(`- Target Role: ${sessionContext.role}`);
+      if (sessionContext.sessionType) lines.push(`- Session Type: ${sessionContext.sessionType}`);
+      if (sessionContext.jobDescription) {
+        lines.push(`- Job Description / Requirements:\n${sessionContext.jobDescription.slice(0, 3000)}`);
+      }
+      if (sessionContext.customInstructions) {
+        lines.push(`- Interview Focus Directives:\n${sessionContext.customInstructions}`);
+      }
+      lines.push("================================");
+      lines.push("");
+    }
 
     if (profile.resumeText && profile.resumeText.length > 0) {
       lines.push("=== FULL RESUME TEXT ===");
