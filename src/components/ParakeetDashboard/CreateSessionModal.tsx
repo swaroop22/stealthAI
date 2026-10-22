@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Briefcase,
@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { SessionType, AssistantMode, CreateSessionInput } from "../../types";
 import { SessionService, ResumeOption, DocumentOption } from "../../services/sessionService";
+import { ResumeParser } from "../../services/resumeParser";
 import { PasteJobLinkModal } from "./PasteJobLinkModal";
 
 interface CreateSessionModalProps {
@@ -49,12 +50,16 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
   const [selectedDocId, setSelectedDocId] = useState("none");
   const [showPasteJobModal, setShowPasteJobModal] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isUploadingResume, setIsUploadingResume] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const resumeFileInputRef = useRef<HTMLInputElement>(null);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
 
   // Step 2 Preferences
   const [mode, setMode] = useState<AssistantMode>("coding");
   const [autoAnswer, setAutoAnswer] = useState(true);
   const [aiProvider, setAIProvider] = useState("gemini");
-  const [model, setModel] = useState("gemini-3.8-flash");
+  const [model, setModel] = useState("gemini-3.5-flash-lite");
   const [customInstructions, setCustomInstructions] = useState("");
 
   useEffect(() => {
@@ -69,6 +74,107 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
       setDocuments(SessionService.getAvailableDocuments());
     }
   }, [isOpen]);
+
+  // Real-time synchronization when a resume or document is added from ResumeModal or directly
+  useEffect(() => {
+    const handleResumesUpdated = (e: any) => {
+      const list = SessionService.getAvailableResumes();
+      setResumes(list);
+      if (e?.detail?.id) {
+        setSelectedResumeId(e.detail.id);
+      } else if (list.length > 0 && selectedResumeId === "none") {
+        setSelectedResumeId(list[0].id);
+      }
+    };
+
+    const handleDocsUpdated = (e: any) => {
+      const list = SessionService.getAvailableDocuments();
+      setDocuments(list);
+      if (e?.detail?.id) {
+        setSelectedDocId(e.detail.id);
+      }
+    };
+
+    window.addEventListener("stealthai_resumes_updated", handleResumesUpdated);
+    window.addEventListener("stealthai_documents_updated", handleDocsUpdated);
+    return () => {
+      window.removeEventListener("stealthai_resumes_updated", handleResumesUpdated);
+      window.removeEventListener("stealthai_documents_updated", handleDocsUpdated);
+    };
+  }, [selectedResumeId]);
+
+  const handleDirectResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingResume(true);
+    showToast(`Parsing ${file.name}...`, "info");
+    try {
+      const { profile: extracted, rawText } = await ResumeParser.parseFile(file);
+      const added = SessionService.addResume({
+        name: file.name,
+        size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+        text: rawText
+      });
+
+      // Update active profile in localStorage so AI knows the candidate background
+      try {
+        const stored = localStorage.getItem("stealthai_profile");
+        const currentProf = stored ? JSON.parse(stored) : {};
+        const updatedProf = { ...currentProf, ...extracted, resumeFileName: file.name, resumeText: rawText };
+        localStorage.setItem("stealthai_profile", JSON.stringify(updatedProf));
+      } catch (err) {
+        // ignore
+      }
+
+      const updatedResumes = SessionService.getAvailableResumes();
+      setResumes(updatedResumes);
+      setSelectedResumeId(added.id);
+      showToast(`✓ Uploaded and selected ${file.name}!`, "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to parse resume.", "error");
+    } finally {
+      setIsUploadingResume(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const handleDirectDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingDoc(true);
+    showToast(`Uploading ${file.name}...`, "info");
+    try {
+      let rawText = "";
+      if (file.name.toLowerCase().endsWith(".pdf")) {
+        try {
+          const { rawText: pdfText } = await ResumeParser.parseFile(file);
+          rawText = pdfText;
+        } catch {
+          rawText = await file.text();
+        }
+      } else {
+        rawText = await file.text();
+      }
+
+      const added = SessionService.addDocument({
+        name: file.name,
+        size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+        description: rawText.slice(0, 300)
+      });
+
+      const updatedDocs = SessionService.getAvailableDocuments();
+      setDocuments(updatedDocs);
+      setSelectedDocId(added.id);
+      showToast(`✓ Uploaded document ${file.name}!`, "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to upload document.", "error");
+    } finally {
+      setIsUploadingDoc(false);
+      if (e.target) e.target.value = "";
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -307,16 +413,61 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
                   <div className="context-grid-two-col">
                     {/* CV / Resume Dropdown */}
                     <div className="context-dropdown-col">
-                      <span className="dropdown-sublabel">CV / Resume</span>
+                      <div className="context-dropdown-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <span className="dropdown-sublabel">CV / Resume</span>
+                        <button
+                          type="button"
+                          className="btn-upload-direct-trigger"
+                          onClick={() => {
+                            if (resumeFileInputRef.current) {
+                              resumeFileInputRef.current.click();
+                            } else {
+                              onOpenResumeModal();
+                            }
+                          }}
+                          title="Direct file upload (PDF, TXT, DOCX)"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#2563eb",
+                            fontSize: "0.74rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "3px",
+                            padding: 0
+                          }}
+                        >
+                          <Upload size={12} />
+                          <span>{isUploadingResume ? "Uploading..." : "+ Upload File"}</span>
+                        </button>
+                      </div>
+                      <input
+                        ref={resumeFileInputRef}
+                        type="file"
+                        accept=".pdf,.txt,.docx"
+                        style={{ display: "none" }}
+                        onChange={handleDirectResumeUpload}
+                      />
                       <div className="select-wrapper">
                         <select
                           className="form-select-dropdown"
                           value={selectedResumeId}
                           onChange={(e) => {
-                            if (e.target.value === "upload_new") {
+                            const val = e.target.value;
+                            if (val === "upload_new") {
+                              e.target.value = selectedResumeId;
+                              if (resumeFileInputRef.current) {
+                                resumeFileInputRef.current.click();
+                              } else {
+                                onOpenResumeModal();
+                              }
+                            } else if (val === "open_resume_modal") {
+                              e.target.value = selectedResumeId;
                               onOpenResumeModal();
                             } else {
-                              setSelectedResumeId(e.target.value);
+                              setSelectedResumeId(val);
                             }
                           }}
                         >
@@ -329,6 +480,7 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
                             </option>
                           ))}
                           <option value="upload_new">+ Upload New Resume...</option>
+                          <option value="open_resume_modal">📋 Open Resume Studio / Paste...</option>
                         </select>
                         <ChevronDown size={14} className="select-arrow-icon" />
                       </div>
@@ -336,12 +488,50 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
 
                     {/* Documents Dropdown */}
                     <div className="context-dropdown-col">
-                      <span className="dropdown-sublabel">Documents</span>
+                      <div className="context-dropdown-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <span className="dropdown-sublabel">Documents</span>
+                        <button
+                          type="button"
+                          className="btn-upload-direct-trigger"
+                          onClick={() => docFileInputRef.current?.click()}
+                          title="Direct document upload (PDF, TXT)"
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#2563eb",
+                            fontSize: "0.74rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "3px",
+                            padding: 0
+                          }}
+                        >
+                          <Upload size={12} />
+                          <span>{isUploadingDoc ? "Uploading..." : "+ Upload File"}</span>
+                        </button>
+                      </div>
+                      <input
+                        ref={docFileInputRef}
+                        type="file"
+                        accept=".pdf,.txt,.docx"
+                        style={{ display: "none" }}
+                        onChange={handleDirectDocUpload}
+                      />
                       <div className="select-wrapper">
                         <select
                           className="form-select-dropdown"
                           value={selectedDocId}
-                          onChange={(e) => setSelectedDocId(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "upload_doc") {
+                              e.target.value = selectedDocId;
+                              docFileInputRef.current?.click();
+                            } else {
+                              setSelectedDocId(val);
+                            }
+                          }}
                         >
                           <option value="none">
                             {documents.length === 0 ? "No documents uploaded" : "None / Skip document"}
@@ -351,6 +541,7 @@ export const CreateSessionModal: React.FC<CreateSessionModalProps> = ({
                               {d.name}
                             </option>
                           ))}
+                          <option value="upload_doc">+ Upload New Document...</option>
                         </select>
                         <ChevronDown size={14} className="select-arrow-icon" />
                       </div>

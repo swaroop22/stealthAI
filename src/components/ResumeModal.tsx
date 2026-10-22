@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { X, Upload, FileText, CheckCircle2, Sparkles, Code2, Layers, Award, Trash2, ArrowRight } from "lucide-react";
 import type { CandidateProfile } from "../types";
 import { ResumeParser } from "../services/resumeParser";
+import { SessionService } from "../services/sessionService";
 
 interface Props {
   isOpen: boolean;
@@ -40,6 +41,11 @@ export const ResumeModal: React.FC<Props> = ({
 
       // AUTO-COMMIT: Automatically save to persistent storage so it is never lost!
       onSaveProfile(updated);
+      SessionService.addResume({
+        name: file.name,
+        size: `${Math.max(1, Math.round(file.size / 1024))} KB`,
+        text: rawText
+      });
       showToast(`Parsed and saved ${file.name}! AI has memorized your experience.`, "success");
     } catch (err: any) {
       showToast(err.message || "Failed to parse file.", "error");
@@ -57,6 +63,11 @@ export const ResumeModal: React.FC<Props> = ({
 
       // AUTO-COMMIT: Automatically save to persistent storage!
       onSaveProfile(extracted);
+      SessionService.addResume({
+        name: `${extracted.name || "Candidate"}_Resume.txt`,
+        size: `${Math.max(1, Math.round(pasteText.length / 1024))} KB`,
+        text: pasteText.trim()
+      });
       showToast("Resume parsed and saved! AI has memorized your background.", "success");
     } finally {
       setParsing(false);

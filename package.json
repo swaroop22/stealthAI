@@ -62,6 +62,15 @@
     "asarUnpack": [
       "electron/stealth_speech_helper"
     ],
+    "protocols": [
+      {
+        "name": "StealthAI Protocol",
+        "schemes": [
+          "stealthai",
+          "parakeetai"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [

@@ -118,7 +118,7 @@ export class SessionService {
         mode: input.preferences?.mode || "coding",
         autoAnswer: input.preferences?.autoAnswer ?? true,
         aiProvider: input.preferences?.aiProvider || "gemini",
-        model: input.preferences?.model || "gemini-3.8-flash",
+        model: input.preferences?.model || "gemini-3.5-flash-lite",
         customInstructions: input.preferences?.customInstructions || ""
       }
     };
@@ -178,11 +178,12 @@ export class SessionService {
   public static getAvailableResumes(): ResumeOption[] {
     try {
       const stored = localStorage.getItem(RESUMES_STORAGE_KEY);
+      let clean: ResumeOption[] = [];
       if (stored !== null) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
           // Scrub any legacy dummy mock resumes
-          const clean = parsed.filter(
+          clean = parsed.filter(
             (r: ResumeOption) =>
               r &&
               r.id !== "resume-samatha" &&
@@ -190,12 +191,39 @@ export class SessionService {
               r.name !== "Samatha_D.pdf" &&
               r.name !== "Alex_Morgan_Systems.pdf"
           );
-          if (clean.length !== parsed.length) {
-            localStorage.setItem(RESUMES_STORAGE_KEY, JSON.stringify(clean));
-          }
-          return clean;
         }
       }
+
+      // Check if candidate profile has an active parsed resume and include it if missing
+      try {
+        const profileStr = localStorage.getItem("stealthai_profile");
+        if (profileStr) {
+          const prof = JSON.parse(profileStr);
+          if (prof?.resumeFileName || prof?.resumeText) {
+            const fileName = prof.resumeFileName || `${prof.name || "Candidate"}_Resume.txt`;
+            const alreadyExists = clean.some(
+              (r) => r.name.toLowerCase() === fileName.toLowerCase()
+            );
+            if (!alreadyExists && prof.resumeText) {
+              const approximateKb = Math.max(1, Math.round(prof.resumeText.length / 1024));
+              clean.unshift({
+                id: "resume-profile-active",
+                name: fileName,
+                size: `${approximateKb} KB`,
+                text: prof.resumeText,
+                uploadedAt: new Date().toISOString()
+              });
+            }
+          }
+        }
+      } catch (e) {
+        // ignore profile parse failure
+      }
+
+      if (stored !== JSON.stringify(clean)) {
+        localStorage.setItem(RESUMES_STORAGE_KEY, JSON.stringify(clean));
+      }
+      return clean;
     } catch (e) {
       console.warn("Failed to load resumes:", e);
     }
@@ -204,19 +232,41 @@ export class SessionService {
 
   public static addResume(resume: Omit<ResumeOption, "id" | "uploadedAt">): ResumeOption {
     const list = this.getAvailableResumes();
-    const newResume: ResumeOption = {
-      ...resume,
-      id: "resume-" + crypto.randomUUID(),
-      uploadedAt: new Date().toISOString()
-    };
-    const updated = [newResume, ...list];
-    localStorage.setItem(RESUMES_STORAGE_KEY, JSON.stringify(updated));
-    return newResume;
+    const existingIndex = list.findIndex(
+      (r) => r.name.toLowerCase() === resume.name.toLowerCase()
+    );
+
+    let savedResume: ResumeOption;
+    if (existingIndex >= 0) {
+      savedResume = {
+        ...list[existingIndex],
+        ...resume,
+        uploadedAt: new Date().toISOString()
+      };
+      list[existingIndex] = savedResume;
+      localStorage.setItem(RESUMES_STORAGE_KEY, JSON.stringify(list));
+    } else {
+      savedResume = {
+        ...resume,
+        id: "resume-" + crypto.randomUUID(),
+        uploadedAt: new Date().toISOString()
+      };
+      const updated = [savedResume, ...list];
+      localStorage.setItem(RESUMES_STORAGE_KEY, JSON.stringify(updated));
+    }
+
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("stealthai_resumes_updated", { detail: savedResume }));
+    }
+    return savedResume;
   }
 
   public static clearAllResumes(): void {
     try {
       localStorage.setItem(RESUMES_STORAGE_KEY, JSON.stringify([]));
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("stealthai_resumes_updated"));
+      }
     } catch (e) {
       console.error("Failed to clear resumes:", e);
     }
@@ -258,6 +308,9 @@ export class SessionService {
     };
     const updated = [newDoc, ...list];
     localStorage.setItem(DOCUMENTS_STORAGE_KEY, JSON.stringify(updated));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("stealthai_documents_updated", { detail: newDoc }));
+    }
     return newDoc;
   }
 

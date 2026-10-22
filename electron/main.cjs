@@ -10,12 +10,42 @@ app.commandLine.appendSwitch('enable-speech-dispatcher');
 
 const isDev = !app.isPackaged || process.argv.includes('--dev') || process.env.NODE_ENV === 'development';
 
+// Register custom protocols for desktop deep linking
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('stealthai', process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient('parakeetai', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('stealthai');
+  app.setAsDefaultProtocolClient('parakeetai');
+}
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 }
 
 let mainWindow = null;
+let pendingDeepLinkUrl = null;
+
+function handleDeepLink(url) {
+  if (!url) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+    if (process.platform === 'darwin') app.focus({ steal: true });
+    mainWindow.webContents.send('deep-link-url', url);
+  } else {
+    pendingDeepLinkUrl = url;
+  }
+}
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleDeepLink(url);
+});
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -100,6 +130,10 @@ function createWindow() {
     mainWindow.focus();
     if (process.platform === 'darwin') {
       app.focus({ steal: true });
+    }
+    if (pendingDeepLinkUrl) {
+      mainWindow.webContents.send('deep-link-url', pendingDeepLinkUrl);
+      pendingDeepLinkUrl = null;
     }
   });
 
@@ -443,12 +477,20 @@ app.whenReady().then(() => {
     }
   });
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, commandLine) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
       if (process.platform === 'darwin') app.focus({ steal: true });
+      if (Array.isArray(commandLine)) {
+        const urlArg = commandLine.find(
+          (arg) => typeof arg === 'string' && (arg.startsWith('stealthai://') || arg.startsWith('parakeetai://'))
+        );
+        if (urlArg) {
+          mainWindow.webContents.send('deep-link-url', urlArg);
+        }
+      }
     } else {
       createWindow();
     }

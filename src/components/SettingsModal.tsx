@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { X, User, Key, Shield, Check, ExternalLink, Cpu, Eye, EyeOff, Sparkles, Globe, Server, CheckCircle2, AlertTriangle, Disc, Folder } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { X, User, Key, Shield, Check, ExternalLink, Cpu, Eye, EyeOff, Sparkles, Globe, Server, CheckCircle2, AlertTriangle, Disc, Folder, Monitor } from "lucide-react";
 import type { CandidateProfile, ConsentAudit, AIProvider, AIProviderConfig } from "../types";
 
 export interface ProviderDef {
@@ -85,19 +85,19 @@ export const PROVIDERS: ProviderDef[] = [
   {
     id: "gemini",
     name: "Google Gemini",
-    tag: "Gemini 2.5",
+    tag: "Gemini 3.8",
     icon: "✨",
     keyPrefix: "AIzaSy",
     keyPlaceholder: "AIzaSy...",
     consoleUrl: "https://aistudio.google.com/app/apikey",
     consoleName: "Google AI Studio",
     description: "Multimodal speed, 2M+ token context, live screen inspection, and built-in voice audio transcription.",
-    defaultModel: "gemini-3.8-flash",
+    defaultModel: "gemini-3.5-flash-lite",
     models: [
-      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", desc: "Flagship real-time reasoning & code intelligence" },
-      { id: "gemini-flash-latest", name: "Gemini Flash Latest", desc: "Always up-to-date highest-throughput model" },
-      { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", desc: "Next-gen low-latency multimodal reasoning" },
-      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", desc: "Legacy fast multimodal" }
+      { id: "gemini-3.5-flash-lite", name: "Gemini 3.5 Flash-Lite (Recommended)", desc: "Ultra-fast ~0.6s real-time streaming answer speed" },
+      { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", desc: "Balanced low-latency multimodal reasoning" },
+      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash", desc: "Deep real-time reasoning & code intelligence" },
+      { id: "gemini-flash-latest", name: "Gemini Flash Latest", desc: "Always up-to-date highest-throughput model" }
     ],
     supportsVision: true,
     supportsSpeech: true
@@ -175,13 +175,25 @@ export const SettingsModal: React.FC<Props> = ({
   const [localProfile, setLocalProfile] = useState<CandidateProfile>(profile);
   const [localConsent, setLocalConsent] = useState<ConsentAudit>(consent);
   const [localAutoRecord, setLocalAutoRecord] = useState(isAutoRecordEnabled);
+  const [preferredPlatform, setPreferredPlatform] = useState<string>(() => {
+    return localStorage.getItem("stealthai_preferred_platform") || "prompt";
+  });
   const [showKey, setShowKey] = useState(false);
   const [savedAlert, setSavedAlert] = useState(false);
+  const saveTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
 
   // Initialize active AI config
   const initialProvider = aiConfig?.provider || (apiKey.startsWith("sk-ant-") ? "claude" : apiKey.startsWith("pplx-") ? "perplexity" : apiKey.startsWith("sk-") ? "openai" : "gemini");
   const initialKey = aiConfig?.apiKey || apiKey || "";
-  const initialModel = aiConfig?.model || PROVIDERS.find((p) => p.id === initialProvider)?.defaultModel || "gemini-3.8-flash";
+  const initialModel = aiConfig?.model || PROVIDERS.find((p) => p.id === initialProvider)?.defaultModel || "gemini-3.5-flash-lite";
   const initialBaseUrl = aiConfig?.baseUrl || (initialProvider === "custom_openai" ? "https://api.deepseek.com/v1" : "");
 
   const [selectedProvider, setSelectedProvider] = useState<AIProvider>(initialProvider);
@@ -230,8 +242,17 @@ export const SettingsModal: React.FC<Props> = ({
     }
     onSaveConsent(localConsent);
 
+    if (preferredPlatform === "prompt") {
+      localStorage.removeItem("stealthai_preferred_platform");
+    } else {
+      localStorage.setItem("stealthai_preferred_platform", preferredPlatform);
+    }
+
     setSavedAlert(true);
-    setTimeout(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
       setSavedAlert(false);
       onClose();
     }, 600);
@@ -730,6 +751,94 @@ export const SettingsModal: React.FC<Props> = ({
                     <Folder size={14} />
                     <span>Open Recordings Folder</span>
                   </button>
+                </div>
+              </div>
+
+              {/* SECTION: PREFERRED LAUNCH PLATFORM */}
+              <div className="settings-section" style={{ marginTop: "1.25rem", borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "1.25rem" }}>
+                <div className="section-title">
+                  <Monitor size={16} className="text-accent" />
+                  <h4>Default Session Launch Platform</h4>
+                </div>
+                <p className="section-desc">
+                  Configures the default environment when launching interview sessions from the Call Sessions dashboard.
+                </p>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginTop: "10px" }}>
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      background: preferredPlatform === "desktop" ? "rgba(56, 189, 248, 0.15)" : "rgba(15, 23, 42, 0.6)",
+                      border: preferredPlatform === "desktop" ? "1px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.08)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="preferredPlatform"
+                      value="desktop"
+                      checked={preferredPlatform === "desktop"}
+                      onChange={() => setPreferredPlatform("desktop")}
+                    />
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#f8fafc" }}>StealthAI Desktop App</div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>Floating HUD, Screen-Share Invisible</div>
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      background: preferredPlatform === "browser" ? "rgba(56, 189, 248, 0.15)" : "rgba(15, 23, 42, 0.6)",
+                      border: preferredPlatform === "browser" ? "1px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.08)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="preferredPlatform"
+                      value="browser"
+                      checked={preferredPlatform === "browser"}
+                      onChange={() => setPreferredPlatform("browser")}
+                    />
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#f8fafc" }}>Browser Studio Mode</div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>Runs in browser tab, instant start</div>
+                    </div>
+                  </label>
+
+                  <label
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      background: preferredPlatform === "prompt" ? "rgba(56, 189, 248, 0.15)" : "rgba(15, 23, 42, 0.6)",
+                      border: preferredPlatform === "prompt" ? "1px solid #38bdf8" : "1px solid rgba(255, 255, 255, 0.08)",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="preferredPlatform"
+                      value="prompt"
+                      checked={preferredPlatform === "prompt"}
+                      onChange={() => setPreferredPlatform("prompt")}
+                    />
+                    <div>
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: "#f8fafc" }}>Always Ask (Show Modal)</div>
+                      <div style={{ fontSize: "11px", color: "#94a3b8" }}>Prompt choice before launching</div>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>

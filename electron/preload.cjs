@@ -22,5 +22,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('native-speech-event', handler);
     return () => ipcRenderer.removeListener('native-speech-event', handler);
+  },
+  onDeepLink: (callback) => {
+    const handler = (_event, url) => callback(url);
+    ipcRenderer.on('deep-link-url', handler);
+    return () => ipcRenderer.removeListener('deep-link-url', handler);
   }
 });

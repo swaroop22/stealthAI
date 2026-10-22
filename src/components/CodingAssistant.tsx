@@ -471,6 +471,7 @@ export const CodingAssistant: React.FC<Props> = ({
                     <Download size={15} />
                     <span>Export Session JSON</span>
                   </button>
+
                   <button
                     onClick={() => {
                       setIsMoreMenuOpen(false);
@@ -478,7 +479,7 @@ export const CodingAssistant: React.FC<Props> = ({
                     }}
                   >
                     <LayoutGrid size={15} />
-                    <span>Full Dashboard View</span>
+                    <span>Open Dashboard in Browser</span>
                   </button>
                 </div>
               )}

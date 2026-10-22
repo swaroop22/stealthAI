@@ -23,7 +23,7 @@ interface CallSessionsDashboardProps {
   sessions: CallSession[];
   activeSession: CallSession | null;
   onCreateSession: (input: CreateSessionInput, launchDirectly: boolean) => void;
-  onStartSession: (session: CallSession) => void;
+  onStartSession: (session: CallSession, forceModal?: boolean) => void;
   onDeleteSession: (sessionId: string) => void;
   onExportSession: (session: CallSession) => void;
   onSwitchToHUD: () => void;
@@ -49,7 +49,14 @@ export const CallSessionsDashboard: React.FC<CallSessionsDashboardProps> = ({
   const [activeNav, setActiveNav] = useState("callSessions");
   const [filterType, setFilterType] = useState<"All" | SessionType>("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      const search = window.location.search;
+      const hash = window.location.hash;
+      return search.includes("create=true") || hash === "#create-session" || search.includes("action=create-session");
+    }
+    return false;
+  });
   const [selectedDetailSession, setSelectedDetailSession] = useState<CallSession | null>(null);
 
   // Filter sessions by tab and search

@@ -9,6 +9,7 @@ import { ResumeModal } from "./components/ResumeModal";
 import { CodingAssistant } from "./components/CodingAssistant";
 import { CallSessionsDashboard } from "./components/ParakeetDashboard/CallSessionsDashboard";
 import { DownloadModal } from "./components/DownloadModal";
+import { LaunchPlatformModal } from "./components/ParakeetDashboard/LaunchPlatformModal";
 import { SessionService } from "./services/sessionService";
 import { SpeechService } from "./services/speechService";
 import { ScreenCaptureService } from "./services/screenService";
@@ -73,7 +74,11 @@ const IGNORED_AUTO_ANSWER_PHRASES = [
 ];
 
 export default function App() {
-  const [viewMode, setViewMode] = useState<"sessions" | "overlay" | "dashboard">("sessions");
+  const isElectron = typeof window !== "undefined" && Boolean((window as any).electronAPI);
+  const [viewMode, setViewMode] = useState<"sessions" | "overlay" | "dashboard">(() => {
+    if (isElectron) return "overlay";
+    return "sessions";
+  });
   const [sessions, setSessions] = useState<CallSession[]>(() => SessionService.getAllSessions());
   const [activeSession, setActiveSession] = useState<CallSession | null>(null);
   const [sessionTimerSeconds, setSessionTimerSeconds] = useState<number>(0);
@@ -124,7 +129,7 @@ export default function App() {
     }
     const envKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY || "").trim();
     if (envKey) {
-      return { provider: "gemini", apiKey: envKey, model: "gemini-3.8-flash" };
+      return { provider: "gemini", apiKey: envKey, model: "gemini-3.5-flash-lite" };
     }
     return AIEngine.normalizeConfig("");
   });
@@ -149,6 +154,8 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isResumeModalOpen, setIsResumeModalOpen] = useState<boolean>(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(false);
+  const [isLaunchPlatformModalOpen, setIsLaunchPlatformModalOpen] = useState<boolean>(false);
+  const [sessionToLaunch, setSessionToLaunch] = useState<CallSession | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "info" | "success" | "error" } | null>(null);
 
   // Audio Recording to Computer (Default: Enabled)
@@ -232,7 +239,7 @@ export default function App() {
         lastAutoAnsweredQuestionRef.current = finalQ;
         showToast(`⚡ Auto-Answering: "${finalQ.slice(0, 42)}..."`, "info");
         triggerGenRef.current(finalQ, undefined, finalExtracted.fullTranscriptText);
-      }, 1100);
+      }, 350);
     },
     []
   );
@@ -328,6 +335,25 @@ export default function App() {
       clearTimeout(autoAnswerTimerRef.current);
     }
   }, []);
+
+  // Automatically start microphone listening by default on mount
+  useEffect(() => {
+    let mounted = true;
+    const initMic = async () => {
+      // Small pause to let runtime audio contexts and permissions resolve smoothly
+      await new Promise((r) => setTimeout(r, 120));
+      if (!mounted) return;
+      try {
+        await startListening();
+      } catch (e) {
+        console.warn("Auto-start microphone:", e);
+      }
+    };
+    initMic();
+    return () => {
+      mounted = false;
+    };
+  }, [startListening]);
 
   // Active call duration timer
   useEffect(() => {
@@ -719,6 +745,23 @@ export default function App() {
   const activeResponse = responses.find((r) => r.id === activeResponseId) || (responses.length > 0 ? responses[0] : null);
 
   // Parakeet AI Session Management Handlers
+  const handleRequestStartSession = (session: CallSession, forceModal = false) => {
+    if (!forceModal) {
+      const preferred = localStorage.getItem("stealthai_preferred_platform");
+      if (preferred === "desktop") {
+        showToast(`Launching ${session.company} in StealthAI Desktop (Remembered choice)...`, "info");
+        handleLaunchInDesktop(session);
+        return;
+      } else if (preferred === "browser") {
+        showToast(`Launching ${session.company} in Browser Studio (Remembered choice)...`, "info");
+        handleLaunchInBrowser(session);
+        return;
+      }
+    }
+    setSessionToLaunch(session);
+    setIsLaunchPlatformModalOpen(true);
+  };
+
   const handleCreateSession = (input: CreateSessionInput, launchDirectly: boolean) => {
     const newSession = SessionService.createSession(input);
     const updatedList = SessionService.getAllSessions();
@@ -726,11 +769,11 @@ export default function App() {
     showToast(`Session "${newSession.company}" created successfully!`, "success");
 
     if (launchDirectly) {
-      handleStartSession(newSession);
+      handleRequestStartSession(newSession);
     }
   };
 
-  const handleStartSession = async (session: CallSession) => {
+  const handleLaunchInBrowser = async (session: CallSession) => {
     const updated = SessionService.updateSession(session.id, { status: "Live" });
     setActiveSession(updated);
     setSessions(SessionService.getAllSessions());
@@ -760,12 +803,142 @@ export default function App() {
     // Switch to studio live mode
     setViewMode("dashboard");
     await startListening();
-    showToast(`Started live session for ${updated.company}!`, "success");
+    showToast(`Started live session for ${updated.company} in Browser!`, "success");
+  };
+
+  const handleLaunchInDesktop = async (session: CallSession) => {
+    const isElectron = Boolean((window as any).electronAPI);
+    if (isElectron) {
+      // Already running inside Electron: start directly in Stealth HUD mode
+      const updated = SessionService.updateSession(session.id, { status: "Live" });
+      setActiveSession(updated);
+      setSessions(SessionService.getAllSessions());
+      setTranscript(updated.transcript || []);
+      setResponses(updated.responses || []);
+      if (updated.responses && updated.responses.length > 0) {
+        setActiveResponseId(updated.responses[0].id);
+      }
+      if (updated.resumeText) {
+        setProfile((prev) => ({
+          ...prev,
+          resumeText: updated.resumeText,
+          resumeFileName: updated.resumeFileName || prev.resumeFileName
+        }));
+      }
+      if (updated.preferences) {
+        if (updated.preferences.mode) setActiveMode(updated.preferences.mode);
+        if (typeof updated.preferences.autoAnswer === "boolean") {
+          setAutoAnswer(updated.preferences.autoAnswer);
+        }
+      }
+      setSessionTimerSeconds(updated.durationSeconds || 0);
+      setViewMode("overlay");
+      await startListening();
+      showToast(`Started ${updated.company} in Stealth Desktop HUD!`, "success");
+    } else {
+      // In web browser: Update session state in SessionService
+      const updated = SessionService.updateSession(session.id, { status: "Live" });
+      setActiveSession(updated);
+      setSessions(SessionService.getAllSessions());
+
+      const deepLink = `stealthai://start-session?id=${encodeURIComponent(session.id)}&company=${encodeURIComponent(session.company)}`;
+
+      // 1. Try local Vite bridge API with short timeout
+      let openedViaApi = false;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+        const res = await fetch(
+          `/api/launch-desktop?id=${encodeURIComponent(session.id)}&company=${encodeURIComponent(session.company)}`,
+          { method: "POST", signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            openedViaApi = true;
+            showToast(`✓ StealthAI Desktop launched for ${session.company}!`, "success");
+          }
+        }
+      } catch (e) {
+        // Fallback to custom protocol
+      }
+
+      // 2. Direct top-level navigation to custom protocol
+      if (!openedViaApi) {
+        try {
+          window.location.href = deepLink;
+          showToast(`Opening ${session.company} in StealthAI Desktop...`, "info");
+        } catch (err) {
+          console.warn("Could not trigger protocol link:", err);
+        }
+      }
+
+      setTimeout(() => {
+        showToast("If desktop app didn't open, click Download Desktop to install.", "info");
+      }, 3000);
+    }
+  };
+
+  const handleStartSession = handleRequestStartSession;
+
+  // Electron native deep link handler (stealthai://start-session?id=...)
+  useEffect(() => {
+    const electron = (window as any).electronAPI;
+    if (electron?.onDeepLink) {
+      const cleanup = electron.onDeepLink((url: string) => {
+        try {
+          let sessionId = "";
+          let company = "";
+          if (url.includes("?")) {
+            const query = url.split("?")[1];
+            const params = new URLSearchParams(query);
+            sessionId = params.get("id") || "";
+            company = params.get("company") || "";
+          }
+          if (sessionId) {
+            const allSessions = SessionService.getAllSessions();
+            let found = allSessions.find((s) => s.id === sessionId);
+            if (!found && company) {
+              found = SessionService.createSession({
+                sessionType: "Interview",
+                company: decodeURIComponent(company),
+                role: "Live Call",
+                jobDescription: ""
+              });
+            }
+            if (found) {
+              handleLaunchInDesktop(found);
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to process incoming deep link:", e);
+        }
+      });
+      return cleanup;
+    }
+  }, []);
+
+  const handleOpenCreateSessionInBrowser = () => {
+    if (isElectron) {
+      const baseUrl =
+        typeof window !== "undefined" && window.location.origin.startsWith("http")
+          ? window.location.origin
+          : "http://localhost:5173";
+      window.open(`${baseUrl}/?create=true`, "_blank");
+      showToast("Opened StealthAI Create Session UI in browser!", "info");
+    } else {
+      setViewMode("sessions");
+    }
   };
 
   const handleEndSession = () => {
     if (!activeSession) {
-      setViewMode("sessions");
+      if (isElectron) {
+        setViewMode("overlay");
+      } else {
+        setViewMode("sessions");
+      }
       return;
     }
 
@@ -786,7 +959,11 @@ export default function App() {
 
     setActiveSession(null);
     setSessions(SessionService.getAllSessions());
-    setViewMode("sessions");
+    if (isElectron) {
+      setViewMode("overlay");
+    } else {
+      setViewMode("sessions");
+    }
     showToast(`Session for ${ended.company} ended (${ended.duration}) and saved to Call Sessions.`, "success");
   };
 
@@ -904,7 +1081,7 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenResumeModal={() => setIsResumeModalOpen(true)}
           onExportSession={handleExport}
-          onSwitchToDashboard={() => setViewMode("sessions")}
+          onSwitchToDashboard={handleOpenCreateSessionInBrowser}
           activeSession={activeSession}
           onEndSession={handleEndSession}
           showToast={showToast}
@@ -915,7 +1092,7 @@ export default function App() {
           <div className="view-switch-banner">
             <button
               className="btn-overlay-mode"
-              onClick={() => setViewMode("sessions")}
+              onClick={handleOpenCreateSessionInBrowser}
               title="Return to Call Sessions Dashboard"
             >
               <ArrowLeft size={15} />
@@ -937,7 +1114,7 @@ export default function App() {
             profile={profile}
             activeSession={activeSession}
             onEndSession={handleEndSession}
-            onBackToDashboard={() => setViewMode("sessions")}
+            onBackToDashboard={handleOpenCreateSessionInBrowser}
             onOpenResumeModal={() => setIsResumeModalOpen(true)}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
@@ -1079,6 +1256,20 @@ export default function App() {
       <DownloadModal
         isOpen={isDownloadModalOpen}
         onClose={() => setIsDownloadModalOpen(false)}
+        showToast={showToast}
+      />
+
+      {/* Launch Platform Selector Modal (Desktop App vs Browser) */}
+      <LaunchPlatformModal
+        isOpen={isLaunchPlatformModalOpen}
+        session={sessionToLaunch}
+        onClose={() => {
+          setIsLaunchPlatformModalOpen(false);
+          setSessionToLaunch(null);
+        }}
+        onLaunchBrowser={handleLaunchInBrowser}
+        onLaunchDesktop={handleLaunchInDesktop}
+        onOpenDownloadModal={() => setIsDownloadModalOpen(true)}
         showToast={showToast}
       />
     </>

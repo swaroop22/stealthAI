@@ -18,7 +18,7 @@ export class AIEngine {
 
   public static normalizeConfig(configOrKey?: AIProviderConfig | string): AIProviderConfig {
     if (!configOrKey) {
-      return { provider: "gemini", apiKey: "", model: "gemini-3.8-flash" };
+      return { provider: "gemini", apiKey: "", model: "gemini-3.5-flash-lite" };
     }
     if (typeof configOrKey === "string") {
       const trimmed = configOrKey.trim();
@@ -29,24 +29,24 @@ export class AIEngine {
       } else if (trimmed.startsWith("sk-")) {
         return { provider: "openai", apiKey: trimmed, model: "gpt-4o" };
       } else {
-        return { provider: "gemini", apiKey: trimmed, model: "gemini-3.8-flash" };
+        return { provider: "gemini", apiKey: trimmed, model: "gemini-3.5-flash-lite" };
       }
     }
     const cfg = { ...configOrKey };
     if (cfg.provider === "gemini") {
-      // Auto-migrate deprecated 404 models to current 3.8 release
-      if (!cfg.model || cfg.model.includes("2.5") || cfg.model.includes("2.0") || cfg.model.includes("1.5")) {
-        cfg.model = "gemini-3.8-flash";
+      // Auto-migrate deprecated 404 or high-demand models to lightning-fast 3.5-flash-lite
+      if (!cfg.model || cfg.model.includes("2.5") || cfg.model.includes("2.0") || cfg.model.includes("1.5") || cfg.model === "gemini-3.8-flash") {
+        cfg.model = "gemini-3.5-flash-lite";
       }
     }
     return cfg;
   }
 
   private static readonly FLASH_MODELS = [
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
     "gemini-3.5-flash",
-    "gemini-2.5-flash"
+    "gemini-3.1-flash-lite",
+    "gemini-3.8-flash"
   ];
 
   public static async generateStreamingResponse(
@@ -159,6 +159,7 @@ export class AIEngine {
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(3500) : undefined,
           body: JSON.stringify({
             contents: [
               {
@@ -177,7 +178,10 @@ export class AIEngine {
             ],
             generationConfig: {
               temperature: 0.1,
-              maxOutputTokens: 256
+              maxOutputTokens: 256,
+              thinkingConfig: {
+                thinkingBudget: 0
+              }
             }
           })
         });
@@ -567,6 +571,17 @@ export class AIEngine {
     let lastError: Error | null = null;
     for (const model of candidateModels) {
       if (signal.aborted) return;
+      const attemptController = new AbortController();
+      let streamStarted = false;
+      const attemptTimeout = setTimeout(() => {
+        if (!streamStarted) {
+          attemptController.abort();
+        }
+      }, 3500);
+
+      const onAbort = () => attemptController.abort();
+      signal.addEventListener("abort", onAbort, { once: true });
+
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
         const response = await fetch(url, {
@@ -577,19 +592,28 @@ export class AIEngine {
             contents,
             generationConfig: {
               temperature: 0.35,
-              maxOutputTokens: 2048
+              maxOutputTokens: 2048,
+              thinkingConfig: {
+                thinkingBudget: 0
+              }
             }
           }),
-          signal
+          signal: attemptController.signal
         });
 
         if (!response.ok) {
+          clearTimeout(attemptTimeout);
+          signal.removeEventListener("abort", onAbort);
           lastError = new Error(`Gemini API ${model} HTTP ${response.status}`);
           continue;
         }
 
         const reader = response.body?.getReader();
-        if (!reader) throw new Error("No readable stream received.");
+        if (!reader) {
+          clearTimeout(attemptTimeout);
+          signal.removeEventListener("abort", onAbort);
+          throw new Error("No readable stream received.");
+        }
 
         const decoder = new TextDecoder();
         let accumulated = "";
@@ -613,7 +637,13 @@ export class AIEngine {
                 const candidate = parsed.candidates?.[0];
                 const parts = candidate?.content?.parts || [];
                 for (const part of parts) {
+                  // Filter out internal thinking tokens so only final answer tokens stream immediately
+                  if (part.thought) continue;
                   if (part.text) {
+                    if (!streamStarted) {
+                      streamStarted = true;
+                      clearTimeout(attemptTimeout);
+                    }
                     accumulated += part.text;
                     callbacks.onToken(part.text, accumulated);
                   }
@@ -625,11 +655,16 @@ export class AIEngine {
           }
         }
 
+        clearTimeout(attemptTimeout);
+        signal.removeEventListener("abort", onAbort);
+
         if (accumulated.trim().length > 0) {
           callbacks.onComplete(accumulated);
           return;
         }
       } catch (err: any) {
+        clearTimeout(attemptTimeout);
+        signal.removeEventListener("abort", onAbort);
         if (signal.aborted) return;
         lastError = err;
       }
@@ -643,21 +678,27 @@ export class AIEngine {
         const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(3000) : undefined,
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemInstructions }] },
             contents,
             generationConfig: {
               temperature: 0.25,
-              maxOutputTokens: 2048
+              maxOutputTokens: 2048,
+              thinkingConfig: {
+                thinkingBudget: 0
+              }
             }
-          }),
-          signal
+          })
         });
 
         if (!response.ok) continue;
 
         const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const candidate = data.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+        const answerPart = parts.find((p: any) => !p.thought && p.text);
+        const text = answerPart?.text || parts[0]?.text;
         if (text && text.trim().length > 0) {
           const words = text.split(/(\s+|\n)/);
           let accumulated = "";
@@ -665,7 +706,7 @@ export class AIEngine {
             if (signal.aborted) return;
             accumulated += word;
             callbacks.onToken(word, accumulated);
-            await new Promise((r) => setTimeout(r, 6));
+            await new Promise((r) => setTimeout(r, 2));
           }
           callbacks.onComplete(accumulated);
           return;
@@ -696,8 +737,10 @@ export class AIEngine {
       accumulated += piece;
       callbacks.onToken(piece, accumulated);
 
-      const delay = piece === "\n" ? 16 : piece.length > 5 ? 7 : 3;
-      await new Promise((r) => setTimeout(r, delay));
+      const delay = piece === "\n" ? 2 : 0;
+      if (delay > 0) {
+        await new Promise((r) => setTimeout(r, delay));
+      }
     }
 
     callbacks.onComplete(accumulated);

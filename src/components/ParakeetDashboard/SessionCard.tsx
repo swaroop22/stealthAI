@@ -8,14 +8,15 @@ import {
   Share2,
   Clock,
   Sparkles,
-  Phone
+  Phone,
+  Monitor
 } from "lucide-react";
 import type { CallSession } from "../../types";
 
 interface SessionCardProps {
   session: CallSession;
   onViewTranscript: (session: CallSession) => void;
-  onStartSession: (session: CallSession) => void;
+  onStartSession: (session: CallSession, forceModal?: boolean) => void;
   onDeleteSession: (sessionId: string) => void;
   onExportSession: (session: CallSession) => void;
 }
@@ -72,6 +73,16 @@ export const SessionCard: React.FC<SessionCardProps> = ({
               >
                 <Play size={14} />
                 <span>{session.status === "Live" ? "Join Active Call" : "Launch / Resume Session"}</span>
+              </button>
+              <button
+                className="dropdown-item"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  onStartSession(session, true);
+                }}
+              >
+                <Monitor size={14} />
+                <span>Choose Platform (Desktop / Browser)</span>
               </button>
               <button
                 className="dropdown-item"

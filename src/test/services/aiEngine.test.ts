@@ -14,10 +14,10 @@ describe('aiEngine service', () => {
   };
 
   describe('normalizeConfig', () => {
-    it('returns gemini-3.8-flash default when no config is provided', () => {
+    it('returns gemini-3.5-flash-lite default when no config is provided', () => {
       const cfg = AIEngine.normalizeConfig();
       expect(cfg.provider).toBe('gemini');
-      expect(cfg.model).toBe('gemini-3.8-flash');
+      expect(cfg.model).toBe('gemini-3.5-flash-lite');
       expect(cfg.apiKey).toBe('');
     });
 
@@ -42,15 +42,18 @@ describe('aiEngine service', () => {
       expect(cfg.apiKey).toBe('pplx-abcdefghijk');
     });
 
-    it('auto-migrates deprecated 404 models (gemini-2.5-flash, gemini-2.0, gemini-1.5) to gemini-3.8-flash', () => {
+    it('auto-migrates deprecated 404 models (gemini-2.5-flash, gemini-2.0, gemini-1.5, gemini-3.8-flash) to gemini-3.5-flash-lite', () => {
       const cfg25 = AIEngine.normalizeConfig({ provider: 'gemini', apiKey: 'test', model: 'gemini-2.5-flash' });
-      expect(cfg25.model).toBe('gemini-3.8-flash');
+      expect(cfg25.model).toBe('gemini-3.5-flash-lite');
 
       const cfg20 = AIEngine.normalizeConfig({ provider: 'gemini', apiKey: 'test', model: 'gemini-2.0-flash' });
-      expect(cfg20.model).toBe('gemini-3.8-flash');
+      expect(cfg20.model).toBe('gemini-3.5-flash-lite');
 
       const cfg15 = AIEngine.normalizeConfig({ provider: 'gemini', apiKey: 'test', model: 'gemini-1.5-flash' });
-      expect(cfg15.model).toBe('gemini-3.8-flash');
+      expect(cfg15.model).toBe('gemini-3.5-flash-lite');
+
+      const cfg38 = AIEngine.normalizeConfig({ provider: 'gemini', apiKey: 'test', model: 'gemini-3.8-flash' });
+      expect(cfg38.model).toBe('gemini-3.5-flash-lite');
     });
   });
 

@@ -364,8 +364,8 @@ export class SpeechService {
       } else if (this.isRecordingAudio) {
         this.silenceCounter++;
 
-        // After ~1.0 second of silence (10 ticks * 100ms) after speech
-        if (this.silenceCounter >= 10) {
+        // After ~0.4 second of silence (4 ticks * 100ms) after speech
+        if (this.silenceCounter >= 4) {
           const durationTicks = this.speechDurationCounter;
           this.stopAudioChunk(durationTicks);
         }
@@ -415,8 +415,8 @@ export class SpeechService {
       const audioBlob = new Blob(this.recordedChunks, { type: mimeType });
       this.recordedChunks = [];
 
-      // Process if speech was sustained (> 0.4 seconds)
-      if (durationTicks >= 4 && audioBlob.size > 1024) {
+      // Process if speech was sustained (> 0.3 seconds)
+      if (durationTicks >= 3 && audioBlob.size > 1024) {
         if (this.webSpeechDisabled) {
           const cfg = AIEngine.normalizeConfig(this.aiConfig || this.apiKey);
           const hasApiKey = Boolean(cfg.apiKey && cfg.apiKey.trim().length > 5);
